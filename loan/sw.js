@@ -1,18 +1,17 @@
-// Offline helper. Must be named <page name>-sw.js, next to <page name>.html
-// (loan.html -> loan-sw.js). The page name is read from this file's own name.
-const CACHE = 'tracker-' + location.pathname;
-const PAGE = './' + location.pathname.split('/').pop().replace(/-sw\.js$/, '.html');
+// Offline helper for the Loan Tracker. Network first, cache when offline.
+const CACHE = 'loan-v1';
+const PAGE = './index.html';
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(['./', PAGE])).then(() => self.skipWaiting())
+    caches.open(CACHE).then(c => c.addAll(['./', PAGE, './manifest.webmanifest', './icon.png'])).then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE && k.startsWith('tracker-') === false).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE && k.startsWith('loan-')).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

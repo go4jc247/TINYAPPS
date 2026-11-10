@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#1f6feb">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
 <title>Loan Tracker</title>
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--tx:#1b1f24;--mut:#667085;--bd:#e3e6ea;--ac:#1f6feb;--ok:#1a7f37;--bad:#cf222e;--warn:#9a6700}
@@ -265,9 +268,7 @@ $('importFile').onchange = async e => {
 
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-  // The worker file must be named <this page's name>-sw.js (e.g. loan.html -> loan-sw.js)
-  const base = (location.pathname.split('/').pop() || 'index.html').replace(/\.html?$/i, '') || 'index';
-  navigator.serviceWorker.register(base + '-sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
 }
 render();
 </script>
