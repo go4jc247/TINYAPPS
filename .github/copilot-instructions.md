@@ -21,6 +21,8 @@ sw.js             Service worker for the landing page only.
 - Each app is self-contained: one `index.html` with inline CSS and JS. Use relative paths only.
 - Each app has its own `sw.js`, registered with `scope: './'` from its own folder, so apps never clash.
 - Service workers: network first, fall back to cache when offline. Precache the app's own files.
+- Every service worker uses the same cache name: `tiny-apps`. Do not change it.
+- The root `index.html` (hub) is itself installable: it has its own `manifest.webmanifest` and `icon.png` in the root.
 - Data is stored on the device (localStorage or IndexedDB). No servers, no accounts, no tracking.
 - Use a unique storage key per app (example: `loanTracker.v1`) because all apps share one origin.
 - Mobile first. Simple, readable, light and dark mode. Keep files small.
