@@ -330,9 +330,10 @@ function render() {
   else {
     ch.style.display = '';
     const dd = (prev ? diffSnaps(mergedState(snaps, snaps.length - 2), mergedState(snaps, snaps.length - 1)) : []).concat(loggedChanges(last));
-    ch.innerHTML = '<h2>' + (prev ? 'Changes since previous snapshot' : 'First snapshot') + '</h2>' +
-      (dd.length ? dd.map(chgHtml).join('')
-        : !prev ? '<span class="mut">Paste again later to see what changed.</span>' : '<span class="ok">No changes.</span>');
+    const title = prev ? 'Changes since previous snapshot' : 'First snapshot';
+    ch.innerHTML = dd.length
+      ? '<details><summary class="gs" style="margin:0;padding:0">' + title + ' (' + dd.length + ')</summary><div style="margin-top:8px">' + dd.map(chgHtml).join('') + '</div></details>'
+      : '<h2>' + title + '</h2>' + (!prev ? '<span class="mut">Paste again later to see what changed.</span>' : '<span class="ok">No changes.</span>');
   }
 
   const lg = $('ledger'), L = state.ledger.slice().sort((a, b) => dateVal(b.date) - dateVal(a.date) || b.added - a.added);
