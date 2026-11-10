@@ -167,6 +167,41 @@ function parseText(raw, extra, now) {
   }
   return { fields, payments, autopay, recent };
 }
+const DAY = 86400000;
+const dayStart = t => { const d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+// "-", "—/—/—", "N/A" count as empty, so they never overwrite a real value
+const isBlank = v => /^[\s\-—–\/]*$/.test(String(v == null ? '' : v)) || /^n\/?a$/i.test(String(v).trim());
+// Current picture = every snapshot layered oldest to newest. A newer paste wins on conflicts;
+// anything a newer paste leaves out is kept from the older ones.
+function mergedState(snaps, upto) {
+  const m = { fields: {}, ts: {}, payments: [], paymentsTs: 0, autopay: '' };
+  for (let i = 0; i <= upto && i < snaps.length; i++) {
+    const s = snaps[i];
+    for (const k in s.fields) {
+      if (isBlank(s.fields[k]) && m.fields[k] !== undefined) continue;
+      m.fields[k] = s.fields[k]; m.ts[k] = s.ts;
+    }
+    if (s.payments && s.payments.length) { m.payments = s.payments; m.paymentsTs = s.ts; }
+    if (s.autopay) m.autopay = s.autopay;
+  }
+  return m;
+}
+function parseDue(v) {
+  const m = String(v || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return null;
+  return new Date(m[3].length === 4 ? +m[3] : 2000 + +m[3], +m[1] - 1, +m[2]).getTime();
+}
+// Days relative to the due date as of "now". Negative = days until due, positive = days past due.
+// Uses whichever of "Days Past Due" / "Current Due Date" was pasted most recently (a tie goes to
+// the lender's own Days Past Due number, moved forward by the days since that paste).
+function daysNow(m, now) {
+  const pd = parseInt(m.fields['Days Past Due'], 10), pts = m.ts['Days Past Due'];
+  const due = parseDue(m.fields['Current Due Date']), dts = m.ts['Current Due Date'];
+  const hasPd = !isNaN(pd) && pts;
+  if (due !== null && (!hasPd || dts > pts)) return { n: Math.round((dayStart(now) - due) / DAY), src: 'due' };
+  if (hasPd) return { n: pd + Math.round((dayStart(now) - dayStart(pts)) / DAY), src: 'paste' };
+  return null;
+}
 function payStr(p) { return [p.date, p.type, p.account, p.amount].filter(Boolean).join(' · '); }
 function recStr(r) { return [r.date, r.status, r.note, r.amount, r.account].filter(Boolean).join(' · '); }
 function diffSnaps(a, b) {
@@ -174,7 +209,11 @@ function diffSnaps(a, b) {
   const keys = [...new Set([...Object.keys(a ? a.fields : {}), ...Object.keys(b.fields)])];
   for (const k of keys) {
     const o = a ? a.fields[k] : undefined, n = b.fields[k];
-    if (o !== n) out.push({ k, o, n });
+    if (o !== n) {
+      // the days count moves on its own each day, so don't report it as a change
+      if (k === 'Days Past Due' && a && a.ts[k] && b.ts[k] && parseInt(o, 10) + Math.round((dayStart(b.ts[k]) - dayStart(a.ts[k])) / DAY) === parseInt(n, 10)) continue;
+      out.push({ k, o, n });
+    }
   }
   if ((a ? a.autopay : '') !== b.autopay) out.push({ k: 'Autopay', o: a ? a.autopay : undefined, n: b.autopay });
   const po = a ? a.payments.map(payStr) : [], pn = b.payments.map(payStr);
@@ -264,13 +303,17 @@ function render() {
   if (!last) {
     st.innerHTML = '<h2>Current status</h2><p class="mut" style="margin:0">Nothing saved yet. Paste your account details below and tap Save snapshot.</p>';
   } else {
-    const f = last.fields, d = daysInfo(f['Days Past Due']);
+    const M = mergedState(snaps, snaps.length - 1), f = M.fields, dn = daysNow(M, Date.now()), d = dn ? daysInfo(dn.n) : { t: '—', c: '' };
     const show = (k, label, cls) => f[k] === undefined ? '' : '<div><div class="k">' + label + '</div><div class="v ' + (cls || '') + '">' + esc(f[k]) + '</div></div>';
-    const nxt = last.payments[0];
+    const nxt = M.payments[0];
+    const oldN = Object.keys(M.ts).filter(k => M.ts[k] !== last.ts).length;
+    const carry = oldN ? ' · ' + oldN + ' value' + (oldN > 1 ? 's' : '') + ' kept from earlier pastes' : '';
+    const dOnly = t => new Date(t).toLocaleDateString([], { dateStyle: 'medium' });
     const apKeys = ['Autopay Schedule', 'Autopay Next Date', 'Autopay Amount', 'Autopay Fee', 'Autopay Total', 'Autopay Method', 'Autopay Account'].filter(k => f[k] !== undefined);
     const apHtml = apKeys.length ? '<div class="k" style="margin-top:14px">Autopay details</div>' + apKeys.map(k => '<div class="chg" style="padding:5px 0"><span class="mut">' + esc(k.replace('Autopay ', '')) + ':</span> ' + esc(f[k]) + '</div>').join('') : '';
     st.innerHTML = '<h2>Current status <span class="mut" style="font-weight:400">· saved ' + esc(when(last.ts)) + '</span></h2>' +
-      '<div class="v big ' + d.c + '" style="margin-bottom:12px">' + esc(d.t) + '</div>' +
+      '<div class="v big ' + d.c + '">' + esc(d.t) + '</div><div class="mut" style="font-size:12px;margin:2px 0 12px">' +
+      esc((dn ? (dn.src === 'due' ? 'Counted from the due date' : 'Counted from your paste on ' + dOnly(M.ts['Days Past Due'])) + ' · updates daily' : 'Paste includes no days or due date') + carry) + '</div>' +
       '<div class="grid">' +
       show('Current Due Date', 'Due date') + show('Regular Payment Amount', 'Payment') +
       show('Payoff Amount', 'Payoff') + show('Vehicle Description', 'Vehicle') +
@@ -278,7 +321,7 @@ function render() {
       show('APR(%)', 'APR %') + show('APR', 'APR %') + show('Contract Term', 'Term (months)') + show('Payments Remaining', 'Payments left') +
       show('Applied Interest To Date', 'Interest to date') + show('Payoff Date', 'Payoff date') +
       (nxt ? '<div><div class="k">Next autopay</div><div class="v">' + esc(nxt.date + (nxt.amount ? ' · ' + nxt.amount : '')) + '</div></div>' : '') +
-      (last.autopay ? '<div><div class="k">Autopay</div><div class="v"><span class="tag ' + (/ON/.test(last.autopay) ? 'on' : '') + '">' + esc(last.autopay) + '</span></div></div>' : '') +
+      (M.autopay ? '<div><div class="k">Autopay</div><div class="v"><span class="tag ' + (/ON/.test(M.autopay) ? 'on' : '') + '">' + esc(M.autopay) + '</span></div></div>' : '') +
       '</div>' + apHtml;
   }
 
@@ -286,7 +329,7 @@ function render() {
   if (!last) ch.style.display = 'none';
   else {
     ch.style.display = '';
-    const dd = (prev ? diffSnaps(prev, last) : []).concat(loggedChanges(last));
+    const dd = (prev ? diffSnaps(mergedState(snaps, snaps.length - 2), mergedState(snaps, snaps.length - 1)) : []).concat(loggedChanges(last));
     ch.innerHTML = '<h2>' + (prev ? 'Changes since previous snapshot' : 'First snapshot') + '</h2>' +
       (dd.length ? dd.map(chgHtml).join('')
         : !prev ? '<span class="mut">Paste again later to see what changed.</span>' : '<span class="ok">No changes.</span>');
@@ -327,7 +370,7 @@ function render() {
   else {
     h.style.display = '';
     h.innerHTML = '<h2>History (' + snaps.length + ')</h2>' + snaps.slice().reverse().map(s => {
-      const i = snaps.indexOf(s), dd = (i > 0 ? diffSnaps(snaps[i - 1], s) : []).concat(loggedChanges(s));
+      const i = snaps.indexOf(s), dd = (i > 0 ? diffSnaps(mergedState(snaps, i - 1), mergedState(snaps, i)) : []).concat(loggedChanges(s));
       return '<div class="snap"><div class="top"><strong>' + esc(when(s.ts)) + '</strong>' +
         '<button class="btn s d" data-del="' + esc(s.id) + '">Delete</button></div>' +
         '<div class="mut" style="font-size:13px">' + ((i === 0 ? 'First snapshot · ' : '') + (dd.length ? dd.length + ' change' + (dd.length > 1 ? 's' : '') : 'No changes')) + '</div>' +
@@ -396,6 +439,7 @@ if (navigator.storage && navigator.storage.persist) navigator.storage.persist().
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
 }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 render();
 </script>
 </body>
