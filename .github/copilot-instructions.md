@@ -39,7 +39,7 @@ icon.png                Hub icon.
 - Every app has a "← Back to Tiny Apps" button at the very bottom (a link to `../`) that asks the user
   to confirm with a pop-up (`confirm()`) before leaving, and warns if there is unsaved input. Copy it from `loan/index.html` (`#homeLink`).
 - Mobile first. Simple, readable, light and dark mode. Keep files small.
-- Icons: PNG, 512x512, no more than three colors (brand blue `#0025b8`, green `#098a11`, white), as small as possible.
+- Icons: Existing icons are final. Never regenerate, redraw or recolor `icon.png` files. They already use the brand colors. Only add a new icon when creating a new app, and only if the user provides or asks for one.
 
 ## Adding a new app
 
