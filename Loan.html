@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#1f6feb">
+<title>Loan Tracker</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1b1f24;--mut:#667085;--bd:#e3e6ea;--ac:#1f6feb;--ok:#1a7f37;--bad:#cf222e;--warn:#9a6700}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#171b22;--tx:#e6e9ee;--mut:#8b94a3;--bd:#262c36;--ac:#4c8dff;--ok:#3fb950;--bad:#f85149;--warn:#d29922}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+h1{font-size:18px;margin:0}
+h2{font-size:15px;margin:0 0 10px}
+main{max-width:720px;margin:0 auto;padding:14px;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
+.btn{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:9px 14px;border-radius:9px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.p{background:var(--ac);border-color:var(--ac);color:#fff}
+.btn.s{padding:5px 10px;font-size:13px}
+.btn.d{color:var(--bad)}
+textarea,input[type=text],input[type=url]{width:100%;font:inherit;padding:10px;border:1px solid var(--bd);border-radius:9px;background:var(--bg);color:var(--tx)}
+textarea{min-height:150px;resize:vertical;font-size:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.k{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.03em}
+.v{font-size:17px;font-weight:600;word-break:break-word}
+.big{font-size:22px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.mut{color:var(--mut)}
+.chg{padding:8px 0;border-top:1px solid var(--bd);font-size:14px}
+.chg:first-child{border-top:0}
+.old{text-decoration:line-through;color:var(--mut)}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--bd);color:var(--mut)}
+.tag.on{color:var(--ok);border-color:var(--ok)}
+.snap{padding:10px 0;border-top:1px solid var(--bd)}
+.snap:first-of-type{border-top:0}
+.snap .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+details summary{cursor:pointer;color:var(--mut);font-size:13px;margin-top:4px}
+pre{white-space:pre-wrap;font-size:12px;background:var(--bg);padding:8px;border-radius:8px;overflow:auto}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+#msg{font-size:14px;margin-top:8px;min-height:20px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🚗 Loan Tracker</h1>
+  <div id="linkbar"></div>
+</header>
+<main>
+  <section class="card" id="status"></section>
+
+  <section class="card">
+    <h2>Paste account details</h2>
+    <textarea id="paste" placeholder="Paste the account page text here…"></textarea>
+    <div class="row">
+      <button class="btn p" id="saveBtn">Save snapshot</button>
+      <button class="btn" id="clearBtn">Clear</button>
+    </div>
+    <div id="msg"></div>
+  </section>
+
+  <section class="card" id="changes"></section>
+  <section class="card" id="history"></section>
+
+  <section class="card">
+    <h2>Settings</h2>
+    <label for="link">Loan site link</label>
+    <input type="url" id="link" placeholder="https://your-lender.com/login">
+    <label for="labels">Extra field names to recognize (comma-separated)</label>
+    <input type="text" id="labels" placeholder="e.g. Current Balance, Next Payment Date">
+    <div class="row">
+      <button class="btn p" id="saveSet">Save settings</button>
+      <button class="btn" id="exportBtn">Export backup</button>
+      <button class="btn" id="importBtn">Import backup</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+    <p class="mut" style="font-size:13px;margin:12px 0 0">Everything is stored only on this device, in this browser. Export a backup now and then.</p>
+  </section>
+</main>
+
+<script>
+const KEY = 'loanTracker.v1';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/*PARSER*/
+const BASE_LABELS = ['First Name','Last Name','Vehicle Description','Regular Payment Amount','Current Due Date','Days Past Due','Payoff Amount','Account Number','Current Balance','Principal Balance','Interest Rate','Last Payment Amount','Last Payment Date','Next Payment Date','Past Due Amount','Late Fee','Maturity Date'];
+function parseText(raw, extra) {
+  const labels = BASE_LABELS.concat((extra || '').split(',').map(s => s.trim()).filter(Boolean));
+  const map = new Map(labels.map(l => [l.toLowerCase(), l]));
+  const lines = raw.replace(/\r/g, '').split('\n').map(s => s.trim()).filter(Boolean);
+  const fields = {}, payments = [];
+  let autopay = '', inUp = false, cur = null;
+  const dateRe = /^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*(.*)$/;
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i], low = ln.toLowerCase();
+    if (low === 'view all' || low === 'account details') continue;
+    if (low === 'upcoming payments') { inUp = true; continue; }
+    if (/^autopay\s+(on|off)$/i.test(ln)) { autopay = ln.toUpperCase(); continue; }
+    if (inUp) {
+      const m = ln.match(dateRe);
+      if (m) { cur = { date: m[1], type: m[2], account: '', amount: '' }; payments.push(cur); continue; }
+      if (cur) {
+        if (/^\$/.test(ln)) cur.amount = ln;
+        else cur.account = cur.account ? cur.account + ' ' + ln : ln;
+      }
+      continue;
+    }
+    const c = ln.indexOf(':');
+    if (c > 0 && map.has(ln.slice(0, c).trim().toLowerCase())) {
+      fields[map.get(ln.slice(0, c).trim().toLowerCase())] = ln.slice(c + 1).trim();
+      continue;
+    }
+    if (map.has(low)) {
+      const nxt = lines[i + 1];
+      if (nxt !== undefined && !map.has(nxt.toLowerCase()) && nxt.toLowerCase() !== 'upcoming payments') {
+        fields[map.get(low)] = nxt; i++;
+      }
+    }
+  }
+  return { fields, payments, autopay };
+}
+function payStr(p) { return [p.date, p.type, p.account, p.amount].filter(Boolean).join(' · '); }
+function diffSnaps(a, b) {
+  const out = [];
+  const keys = [...new Set([...Object.keys(a ? a.fields : {}), ...Object.keys(b.fields)])];
+  for (const k of keys) {
+    const o = a ? a.fields[k] : undefined, n = b.fields[k];
+    if (o !== n) out.push({ k, o, n });
+  }
+  if ((a ? a.autopay : '') !== b.autopay) out.push({ k: 'Autopay', o: a ? a.autopay : undefined, n: b.autopay });
+  const po = a ? a.payments.map(payStr) : [], pn = b.payments.map(payStr);
+  pn.filter(x => !po.includes(x)).forEach(x => out.push({ k: 'Upcoming payment', o: undefined, n: x }));
+  po.filter(x => !pn.includes(x)).forEach(x => out.push({ k: 'Upcoming payment', o: x, n: undefined }));
+  return out;
+}
+/*END_PARSER*/
+
+let state = load();
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.snaps)) return s; } catch (e) {}
+  return { link: '', labels: '', snaps: [] };
+}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); return true; }
+  catch (e) { say('Could not save: ' + e.message, true); return false; }
+}
+function say(t, bad) { $('msg').innerHTML = '<span class="' + (bad ? 'bad' : 'ok') + '">' + esc(t) + '</span>'; }
+
+function safeLink(u) {
+  u = (u || '').trim(); if (!u) return '';
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
+  return /^https?:\/\//i.test(u) ? u : '';
+}
+function money(s) { const m = String(s || '').replace(/,/g, '').match(/-?\$?\s*(-?\d+(\.\d+)?)/); return m ? parseFloat(m[1]) : null; }
+function fmtDelta(o, n) {
+  const a = money(o), b = money(n);
+  if (a == null || b == null || a === b || !/\$/.test(o + n)) return '';
+  const d = b - a;
+  return ' <span class="' + (d < 0 ? 'ok' : 'warn') + '">(' + (d > 0 ? '+' : '−') + '$' + Math.abs(d).toFixed(2) + ')</span>';
+}
+function daysInfo(v) {
+  const n = parseInt(v, 10);
+  if (isNaN(n)) return { t: v || '—', c: '' };
+  if (n < 0) return { t: (-n) + ' day' + (n === -1 ? '' : 's') + ' until due', c: 'ok' };
+  if (n === 0) return { t: 'Due today', c: 'warn' };
+  return { t: n + ' day' + (n === 1 ? '' : 's') + ' past due', c: 'bad' };
+}
+const when = ts => new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+
+function render() {
+  const l = safeLink(state.link);
+  $('linkbar').innerHTML = l
+    ? '<a class="btn p s" href="' + esc(l) + '" target="_blank" rel="noopener noreferrer">Open loan site ↗</a>'
+    : '<a class="btn s" href="#link" onclick="document.getElementById(\'link\').focus()">Set link</a>';
+  $('link').value = state.link || '';
+  $('labels').value = state.labels || '';
+
+  const snaps = state.snaps, last = snaps[snaps.length - 1], prev = snaps[snaps.length - 2];
+  const st = $('status');
+  if (!last) {
+    st.innerHTML = '<h2>Current status</h2><p class="mut" style="margin:0">Nothing saved yet. Paste your account details below and tap Save snapshot.</p>';
+  } else {
+    const f = last.fields, d = daysInfo(f['Days Past Due']);
+    const show = (k, label, cls) => f[k] === undefined ? '' : '<div><div class="k">' + label + '</div><div class="v ' + (cls || '') + '">' + esc(f[k]) + '</div></div>';
+    const nxt = last.payments[0];
+    st.innerHTML = '<h2>Current status <span class="mut" style="font-weight:400">· saved ' + esc(when(last.ts)) + '</span></h2>' +
+      '<div class="v big ' + d.c + '" style="margin-bottom:12px">' + esc(d.t) + '</div>' +
+      '<div class="grid">' +
+      show('Current Due Date', 'Due date') + show('Regular Payment Amount', 'Payment') +
+      show('Payoff Amount', 'Payoff') + show('Vehicle Description', 'Vehicle') +
+      show('Current Balance', 'Balance') + show('Past Due Amount', 'Past due amount', 'bad') +
+      (nxt ? '<div><div class="k">Next autopay</div><div class="v">' + esc(nxt.date + (nxt.amount ? ' · ' + nxt.amount : '')) + '</div></div>' : '') +
+      (last.autopay ? '<div><div class="k">Autopay</div><div class="v"><span class="tag ' + (/ON/.test(last.autopay) ? 'on' : '') + '">' + esc(last.autopay) + '</span></div></div>' : '') +
+      '</div>';
+  }
+
+  const ch = $('changes');
+  if (!last) ch.style.display = 'none';
+  else {
+    ch.style.display = '';
+    const dd = diffSnaps(prev, last);
+    ch.innerHTML = '<h2>' + (prev ? 'Changes since previous snapshot' : 'First snapshot') + '</h2>' +
+      (!prev ? '<span class="mut">Paste again later to see what changed.</span>'
+        : dd.length ? dd.map(chgHtml).join('') : '<span class="ok">No changes.</span>');
+  }
+
+  const h = $('history');
+  if (!snaps.length) h.style.display = 'none';
+  else {
+    h.style.display = '';
+    h.innerHTML = '<h2>History (' + snaps.length + ')</h2>' + snaps.slice().reverse().map(s => {
+      const i = snaps.indexOf(s), dd = diffSnaps(snaps[i - 1], s);
+      return '<div class="snap"><div class="top"><strong>' + esc(when(s.ts)) + '</strong>' +
+        '<button class="btn s d" data-del="' + esc(s.id) + '">Delete</button></div>' +
+        '<div class="mut" style="font-size:13px">' + (i === 0 ? 'First snapshot' : dd.length ? dd.length + ' change' + (dd.length > 1 ? 's' : '') : 'No changes') + '</div>' +
+        (i > 0 && dd.length ? dd.map(chgHtml).join('') : '') +
+        '<details><summary>Raw paste</summary><pre>' + esc(s.raw) + '</pre></details></div>';
+    }).join('');
+  }
+}
+function chgHtml(c) {
+  const o = c.o === undefined ? '' : '<span class="old">' + esc(c.o || '(blank)') + '</span> → ';
+  const n = c.n === undefined ? '<span class="bad">removed</span>' : '<strong>' + esc(c.n || '(blank)') + '</strong>';
+  return '<div class="chg"><div class="k">' + esc(c.k) + '</div>' + (c.o === undefined && c.n !== undefined ? '<span class="ok">new</span> ' : '') + o + n + (c.o !== undefined && c.n !== undefined ? fmtDelta(c.o, c.n) : '') + '</div>';
+}
+
+$('saveBtn').onclick = () => {
+  const raw = $('paste').value.trim();
+  if (!raw) return say('Paste something first.', true);
+  const p = parseText(raw, state.labels);
+  if (!Object.keys(p.fields).length && !p.payments.length) return say('No known fields found. Add the field names under Settings.', true);
+  state.snaps.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now(), fields: p.fields, payments: p.payments, autopay: p.autopay, raw });
+  if (persist()) { $('paste').value = ''; render(); say('Saved.'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  else state.snaps.pop();
+};
+$('clearBtn').onclick = () => { $('paste').value = ''; $('msg').innerHTML = ''; };
+$('saveSet').onclick = () => {
+  state.link = $('link').value.trim(); state.labels = $('labels').value.trim();
+  if (state.link && !safeLink(state.link)) return say('Link must be a web address.', true);
+  if (persist()) { render(); say('Settings saved.'); }
+};
+$('history').addEventListener('click', e => {
+  const id = e.target.getAttribute && e.target.getAttribute('data-del');
+  if (id && confirm('Delete this snapshot?')) { state.snaps = state.snaps.filter(s => s.id !== id); persist(); render(); }
+});
+$('exportBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
+  a.download = 'loan-tracker-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+$('importBtn').onclick = () => $('importFile').click();
+$('importFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const s = JSON.parse(await f.text());
+    if (!s || !Array.isArray(s.snaps)) throw new Error('Not a backup file');
+    if (!confirm('Replace current data with this backup (' + s.snaps.length + ' snapshots)?')) return;
+    state = { link: s.link || '', labels: s.labels || '', snaps: s.snaps };
+    persist(); render(); say('Imported.');
+  } catch (err) { say('Import failed: ' + err.message, true); }
+  e.target.value = '';
+};
+
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  // The worker file must be named <this page's name>-sw.js (e.g. loan.html -> loan-sw.js)
+  const base = (location.pathname.split('/').pop() || 'index.html').replace(/\.html?$/i, '') || 'index';
+  navigator.serviceWorker.register(base + '-sw.js').catch(() => {});
+}
+render();
+</script>
+</body>
+</html>
