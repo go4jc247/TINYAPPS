@@ -3,10 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#1f6feb">
+<meta name="theme-color" content="#0025b8">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon.png">
+<link rel="icon" href="icon.png" type="image/png">
 <link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Loan">
 <title>Loan Tracker</title>
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--tx:#1b1f24;--mut:#667085;--bd:#e3e6ea;--ac:#1f6feb;--ok:#1a7f37;--bad:#cf222e;--warn:#9a6700}
@@ -40,6 +43,11 @@ textarea{min-height:150px;resize:vertical;font-size:14px}
 .snap .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
 details summary{cursor:pointer;color:var(--mut);font-size:13px;margin-top:4px}
 pre{white-space:pre-wrap;font-size:12px;background:var(--bg);padding:8px;border-radius:8px;overflow:auto}
+.pay{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--bd);font-size:14px}
+.pay:first-of-type{border-top:0}
+.pay .l{min-width:0}
+.pay .r{text-align:right;white-space:nowrap}
+.gs{color:var(--tx)!important;font-size:14px!important;font-weight:600;padding:8px 0;margin-top:0!important}
 label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
 #msg{font-size:14px;margin-top:8px;min-height:20px}
 </style>
@@ -63,6 +71,7 @@ label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
   </section>
 
   <section class="card" id="changes"></section>
+  <section class="card" id="ledger"></section>
   <section class="card" id="history"></section>
 
   <section class="card">
@@ -87,43 +96,79 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /*PARSER*/
-const BASE_LABELS = ['First Name','Last Name','Vehicle Description','Regular Payment Amount','Current Due Date','Days Past Due','Payoff Amount','Account Number','Current Balance','Principal Balance','Interest Rate','Last Payment Amount','Last Payment Date','Next Payment Date','Past Due Amount','Late Fee','Maturity Date'];
-function parseText(raw, extra) {
+const BASE_LABELS = ['First Name','Last Name','Vehicle Description','Regular Payment Amount','Current Due Date','Days Past Due','Payoff Amount','Account Number','Current Balance','Principal Balance','Interest Rate','Last Payment Amount','Last Payment Date','Next Payment Date','Past Due Amount','Late Fee','Maturity Date','Payoff Date','Applied Interest To Date','Contract Term','Payments Remaining','APR(%)','APR'];
+// Inside a "Recurring Autopay Scheduled" block these labels mean the autopay's own values
+const AUTO = { 'next payment date': 'Autopay Next Date', 'account': 'Autopay Account', 'payment method': 'Autopay Method', 'payment amount': 'Autopay Amount', 'service fee': 'Autopay Fee', 'total amount': 'Autopay Total' };
+const pad = n => String(n).padStart(2, '0');
+function fmtDate(d) { return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '/' + pad(d.getFullYear() % 100); }
+function normDate(s, now) {
+  s = String(s).toLowerCase();
+  const d = new Date(now);
+  if (s === 'today') return fmtDate(d);
+  if (s === 'yesterday') { d.setDate(d.getDate() - 1); return fmtDate(d); }
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  return m ? pad(m[1]) + '/' + pad(m[2]) + '/' + (m[3].length === 4 ? m[3].slice(2) : m[3]) : s;
+}
+function parseText(raw, extra, now) {
+  now = now || Date.now();
   const labels = BASE_LABELS.concat((extra || '').split(',').map(s => s.trim()).filter(Boolean));
   const map = new Map(labels.map(l => [l.toLowerCase(), l]));
   const lines = raw.replace(/\r/g, '').split('\n').map(s => s.trim()).filter(Boolean);
-  const fields = {}, payments = [];
-  let autopay = '', inUp = false, cur = null;
+  const fields = {}, payments = [], recent = [];
+  let autopay = '', mode = '', cur = null;
   const dateRe = /^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*(.*)$/;
+  const recRe = /^(today|yesterday|\d{1,2}\/\d{1,2}\/\d{2,4})\s*[—–-]+\s*(.+)$/i;
+  const amtRe = /^[-+]?\s*\$\s*[\d,]+(\.\d+)?$/;
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i], low = ln.toLowerCase();
     if (low === 'view all' || low === 'account details') continue;
-    if (low === 'upcoming payments') { inUp = true; continue; }
+    if (/^[.…·•\s]+$/.test(ln)) continue;
+    if (low === 'additional payment details') { mode = ''; cur = null; continue; }
+    if (low === 'upcoming payments') { mode = 'up'; cur = null; continue; }
+    if (/^(recent\b.*|all)\s*payments$/i.test(ln)) { mode = 'rec'; cur = null; continue; }
+    if (/^recurring autopay/i.test(ln)) { mode = 'auto'; cur = null; continue; }
+    if (/^pay every\b/i.test(ln)) { fields['Autopay Schedule'] = ln; continue; }
     if (/^autopay\s+(on|off)$/i.test(ln)) { autopay = ln.toUpperCase(); continue; }
-    if (inUp) {
+    if ((mode === 'up' || mode === 'rec') && map.has(low)) { mode = ''; cur = null; }
+    if (mode === 'up') {
       const m = ln.match(dateRe);
-      if (m) { cur = { date: m[1], type: m[2], account: '', amount: '' }; payments.push(cur); continue; }
+      if (m) { cur = { date: normDate(m[1], now), type: m[2], account: '', amount: '' }; payments.push(cur); continue; }
       if (cur) {
-        if (/^\$/.test(ln)) cur.amount = ln;
+        if (amtRe.test(ln)) cur.amount = ln;
         else cur.account = cur.account ? cur.account + ' ' + ln : ln;
       }
       continue;
     }
-    const c = ln.indexOf(':');
-    if (c > 0 && map.has(ln.slice(0, c).trim().toLowerCase())) {
-      fields[map.get(ln.slice(0, c).trim().toLowerCase())] = ln.slice(c + 1).trim();
+    if (mode === 'rec') {
+      const m = ln.match(recRe);
+      if (m) {
+        const parts = m[2].split(/\s*[—–]\s*|\s+-\s+/).map(x => x.trim()).filter(Boolean);
+        cur = { date: normDate(m[1], now), status: parts[0] || m[2].trim(), note: parts.slice(1).join(' · '), account: '', amount: '' };
+        recent.push(cur); continue;
+      }
+      if (cur) {
+        if (amtRe.test(ln)) cur.amount = ln;
+        else cur.account = cur.account ? cur.account + ' ' + ln : ln;
+      }
       continue;
     }
-    if (map.has(low)) {
+    const lab = k => (mode === 'auto' && AUTO[k]) || map.get(k);
+    const c = ln.indexOf(':');
+    if (c > 0 && lab(ln.slice(0, c).trim().toLowerCase())) {
+      fields[lab(ln.slice(0, c).trim().toLowerCase())] = ln.slice(c + 1).trim();
+      continue;
+    }
+    if (lab(low)) {
       const nxt = lines[i + 1];
-      if (nxt !== undefined && !map.has(nxt.toLowerCase()) && nxt.toLowerCase() !== 'upcoming payments') {
-        fields[map.get(low)] = nxt; i++;
+      if (nxt !== undefined && !lab(nxt.toLowerCase()) && !/^((upcoming|recent|all)\b.*payments|recurring autopay.*|additional payment details)$/i.test(nxt)) {
+        fields[lab(low)] = nxt; i++;
       }
     }
   }
-  return { fields, payments, autopay };
+  return { fields, payments, autopay, recent };
 }
 function payStr(p) { return [p.date, p.type, p.account, p.amount].filter(Boolean).join(' · '); }
+function recStr(r) { return [r.date, r.status, r.note, r.amount, r.account].filter(Boolean).join(' · '); }
 function diffSnaps(a, b) {
   const out = [];
   const keys = [...new Set([...Object.keys(a ? a.fields : {}), ...Object.keys(b.fields)])];
@@ -137,12 +182,46 @@ function diffSnaps(a, b) {
   po.filter(x => !pn.includes(x)).forEach(x => out.push({ k: 'Upcoming payment', o: x, n: undefined }));
   return out;
 }
+// Payment log: adds only payments not already logged. The same date + account + amount is the
+// same payment, whichever list it came from (Recent or All Payments). A second identical one in
+// the SAME paste counts as a genuine extra payment.
+const normAcct = a => String(a || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const ledgerBase = e => [e.date, normAcct(e.account), String(e.amount || '').replace(/\s+/g, '')].join('|');
+function fixLedger(l) {
+  const cnt = {};
+  return (Array.isArray(l) ? l : []).slice().sort((x, y) => (x.added || 0) - (y.added || 0)).map(e => {
+    const b = ledgerBase(e); cnt[b] = (cnt[b] || 0) + 1; e.id = b + '#' + cnt[b]; return e;
+  });
+}
+function mergeLedger(ledger, recent, ts) {
+  const counts = {}, logged = [];
+  for (const r of recent) {
+    const base = ledgerBase(r);
+    const k = counts[base] = (counts[base] || 0) + 1;
+    const id = base + '#' + k;
+    const ex = ledger.find(e => e.id === id);
+    if (!ex) {
+      ledger.push({ id, date: r.date, status: r.status, note: r.note || '', account: r.account, amount: r.amount, added: ts });
+      logged.push({ kind: 'new', entry: recStr(r) });
+    } else {
+      if (!ex.note && r.note) ex.note = r.note;
+      if (ex.status !== r.status) { logged.push({ kind: 'status', from: ex.status, entry: recStr(r) }); ex.status = r.status; }
+    }
+  }
+  return logged;
+}
+function loggedChanges(s) {
+  return (s.logged || []).map(l => l.kind === 'new'
+    ? { k: 'Payment logged', o: undefined, n: l.entry }
+    : { k: 'Payment status', o: l.from, n: l.entry });
+}
+const dateVal = d => { const m = String(d).match(/^(\d\d)\/(\d\d)\/(\d\d)$/); return m ? +('20' + m[3] + m[1] + m[2]) : 0; };
 /*END_PARSER*/
 
 let state = load();
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.snaps)) return s; } catch (e) {}
-  return { link: '', labels: '', snaps: [] };
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.snaps)) { s.ledger = fixLedger(s.ledger); return s; } } catch (e) {}
+  return { link: '', labels: '', snaps: [], ledger: [] };
 }
 function persist() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); return true; }
@@ -171,6 +250,7 @@ function daysInfo(v) {
 }
 const when = ts => new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 
+let showAll = false;
 function render() {
   const l = safeLink(state.link);
   $('linkbar').innerHTML = l
@@ -187,25 +267,59 @@ function render() {
     const f = last.fields, d = daysInfo(f['Days Past Due']);
     const show = (k, label, cls) => f[k] === undefined ? '' : '<div><div class="k">' + label + '</div><div class="v ' + (cls || '') + '">' + esc(f[k]) + '</div></div>';
     const nxt = last.payments[0];
+    const apKeys = ['Autopay Schedule', 'Autopay Next Date', 'Autopay Amount', 'Autopay Fee', 'Autopay Total', 'Autopay Method', 'Autopay Account'].filter(k => f[k] !== undefined);
+    const apHtml = apKeys.length ? '<div class="k" style="margin-top:14px">Autopay details</div>' + apKeys.map(k => '<div class="chg" style="padding:5px 0"><span class="mut">' + esc(k.replace('Autopay ', '')) + ':</span> ' + esc(f[k]) + '</div>').join('') : '';
     st.innerHTML = '<h2>Current status <span class="mut" style="font-weight:400">· saved ' + esc(when(last.ts)) + '</span></h2>' +
       '<div class="v big ' + d.c + '" style="margin-bottom:12px">' + esc(d.t) + '</div>' +
       '<div class="grid">' +
       show('Current Due Date', 'Due date') + show('Regular Payment Amount', 'Payment') +
       show('Payoff Amount', 'Payoff') + show('Vehicle Description', 'Vehicle') +
       show('Current Balance', 'Balance') + show('Past Due Amount', 'Past due amount', 'bad') +
+      show('APR(%)', 'APR %') + show('APR', 'APR %') + show('Contract Term', 'Term (months)') + show('Payments Remaining', 'Payments left') +
+      show('Applied Interest To Date', 'Interest to date') + show('Payoff Date', 'Payoff date') +
       (nxt ? '<div><div class="k">Next autopay</div><div class="v">' + esc(nxt.date + (nxt.amount ? ' · ' + nxt.amount : '')) + '</div></div>' : '') +
       (last.autopay ? '<div><div class="k">Autopay</div><div class="v"><span class="tag ' + (/ON/.test(last.autopay) ? 'on' : '') + '">' + esc(last.autopay) + '</span></div></div>' : '') +
-      '</div>';
+      '</div>' + apHtml;
   }
 
   const ch = $('changes');
   if (!last) ch.style.display = 'none';
   else {
     ch.style.display = '';
-    const dd = diffSnaps(prev, last);
+    const dd = (prev ? diffSnaps(prev, last) : []).concat(loggedChanges(last));
     ch.innerHTML = '<h2>' + (prev ? 'Changes since previous snapshot' : 'First snapshot') + '</h2>' +
-      (!prev ? '<span class="mut">Paste again later to see what changed.</span>'
-        : dd.length ? dd.map(chgHtml).join('') : '<span class="ok">No changes.</span>');
+      (dd.length ? dd.map(chgHtml).join('')
+        : !prev ? '<span class="mut">Paste again later to see what changed.</span>' : '<span class="ok">No changes.</span>');
+  }
+
+  const lg = $('ledger'), L = state.ledger.slice().sort((a, b) => dateVal(b.date) - dateVal(a.date) || b.added - a.added);
+  if (!L.length) lg.style.display = 'none';
+  else {
+    lg.style.display = '';
+    const isDone = e => /complete/i.test(e.status);
+    const sum = es => es.filter(isDone).reduce((t, e) => t + (money(e.amount) || 0), 0);
+    const fees = L.reduce((t, e) => { const m = (e.note || '').match(/\$\s*([\d,]+(\.\d+)?)/); return t + (m ? parseFloat(m[1].replace(/,/g, '')) : 0); }, 0);
+    const pend = L.filter(e => !isDone(e)).length;
+    const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const row = e => '<div class="pay"><div class="l"><strong>' + esc(e.date) + '</strong> <span class="' + (isDone(e) ? 'ok' : 'warn') + '">' + esc(e.status) + '</span>' +
+      '<div class="mut" style="font-size:13px">' + esc(e.account) + (e.note ? ' · ' + esc(e.note) : '') + '</div></div><div class="r"><strong>' + esc(e.amount) + '</strong><br>' +
+      '<button class="btn s d" data-ldel="' + esc(e.id) + '">✕</button></div></div>';
+    const stat = (k, v) => '<div><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
+    let body;
+    if (!showAll) body = '<div class="k" style="margin:14px 0 2px">Latest</div>' + L.slice(0, 5).map(row).join('');
+    else {
+      const G = {};
+      L.forEach(e => { const k = String(dateVal(e.date)).slice(0, 6); (G[k] = G[k] || []).push(e); });
+      body = Object.keys(G).sort().reverse().map((k, i) => {
+        const es = G[k], name = k.length === 6 ? MON[+k.slice(4) - 1] + ' ' + k.slice(0, 4) : 'Unknown date';
+        return '<details' + (i === 0 ? ' open' : '') + '><summary class="gs">' + name + ' · ' + es.length + ' payment' + (es.length > 1 ? 's' : '') + ' · $' + sum(es).toFixed(2) + '</summary>' + es.map(row).join('') + '</details>';
+      }).join('');
+    }
+    lg.innerHTML = '<h2>Payment log</h2><div class="grid">' +
+      stat('Payments', L.length) + stat('Total paid', '$' + sum(L).toFixed(2)) +
+      (fees ? stat('Fees listed', '$' + fees.toFixed(2)) : '') + (pend ? stat('Pending', pend) : '') +
+      stat('First payment', esc(L[L.length - 1].date)) + stat('Latest', esc(L[0].date)) + '</div>' + body +
+      '<div class="row"><button class="btn' + (showAll ? '' : ' p') + '" id="moreBtn">' + (showAll ? 'Hide full list' : 'View all payments (' + L.length + ')') + '</button></div>';
   }
 
   const h = $('history');
@@ -213,11 +327,11 @@ function render() {
   else {
     h.style.display = '';
     h.innerHTML = '<h2>History (' + snaps.length + ')</h2>' + snaps.slice().reverse().map(s => {
-      const i = snaps.indexOf(s), dd = diffSnaps(snaps[i - 1], s);
+      const i = snaps.indexOf(s), dd = (i > 0 ? diffSnaps(snaps[i - 1], s) : []).concat(loggedChanges(s));
       return '<div class="snap"><div class="top"><strong>' + esc(when(s.ts)) + '</strong>' +
         '<button class="btn s d" data-del="' + esc(s.id) + '">Delete</button></div>' +
-        '<div class="mut" style="font-size:13px">' + (i === 0 ? 'First snapshot' : dd.length ? dd.length + ' change' + (dd.length > 1 ? 's' : '') : 'No changes') + '</div>' +
-        (i > 0 && dd.length ? dd.map(chgHtml).join('') : '') +
+        '<div class="mut" style="font-size:13px">' + ((i === 0 ? 'First snapshot · ' : '') + (dd.length ? dd.length + ' change' + (dd.length > 1 ? 's' : '') : 'No changes')) + '</div>' +
+        (dd.length ? '<details><summary>Show changes</summary>' + dd.map(chgHtml).join('') + '</details>' : '') +
         '<details><summary>Raw paste</summary><pre>' + esc(s.raw) + '</pre></details></div>';
     }).join('');
   }
@@ -231,11 +345,17 @@ function chgHtml(c) {
 $('saveBtn').onclick = () => {
   const raw = $('paste').value.trim();
   if (!raw) return say('Paste something first.', true);
-  const p = parseText(raw, state.labels);
-  if (!Object.keys(p.fields).length && !p.payments.length) return say('No known fields found. Add the field names under Settings.', true);
-  state.snaps.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ts: Date.now(), fields: p.fields, payments: p.payments, autopay: p.autopay, raw });
-  if (persist()) { $('paste').value = ''; render(); say('Saved.'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  else state.snaps.pop();
+  const now = Date.now(), p = parseText(raw, state.labels, now);
+  if (!Object.keys(p.fields).length && !p.payments.length && !p.recent.length) return say('No known fields found. Add the field names under Settings.', true);
+  const backup = JSON.stringify(state.ledger);
+  const logged = mergeLedger(state.ledger, p.recent, now);
+  state.snaps.push({ id: now.toString(36) + Math.random().toString(36).slice(2, 6), ts: now, fields: p.fields, payments: p.payments, autopay: p.autopay, logged, raw });
+  if (persist()) {
+    $('paste').value = ''; render();
+    const dup = p.recent.length - logged.filter(l => l.kind === 'new').length;
+    say('Saved. ' + logged.filter(l => l.kind === 'new').length + ' new payment(s) logged' + (dup > 0 ? ', ' + dup + ' already logged (skipped).' : '.'));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } else { state.snaps.pop(); state.ledger = JSON.parse(backup); }
 };
 $('clearBtn').onclick = () => { $('paste').value = ''; $('msg').innerHTML = ''; };
 $('saveSet').onclick = () => {
@@ -246,6 +366,12 @@ $('saveSet').onclick = () => {
 $('history').addEventListener('click', e => {
   const id = e.target.getAttribute && e.target.getAttribute('data-del');
   if (id && confirm('Delete this snapshot?')) { state.snaps = state.snaps.filter(s => s.id !== id); persist(); render(); }
+});
+$('ledger').addEventListener('click', e => {
+  const t = e.target;
+  if (t.id === 'moreBtn') { showAll = !showAll; render(); return; }
+  const id = t.getAttribute && t.getAttribute('data-ldel');
+  if (id && confirm('Remove this payment from the log?')) { state.ledger = state.ledger.filter(x => x.id !== id); persist(); render(); }
 });
 $('exportBtn').onclick = () => {
   const a = document.createElement('a');
@@ -260,7 +386,7 @@ $('importFile').onchange = async e => {
     const s = JSON.parse(await f.text());
     if (!s || !Array.isArray(s.snaps)) throw new Error('Not a backup file');
     if (!confirm('Replace current data with this backup (' + s.snaps.length + ' snapshots)?')) return;
-    state = { link: s.link || '', labels: s.labels || '', snaps: s.snaps };
+    state = { link: s.link || '', labels: s.labels || '', snaps: s.snaps, ledger: fixLedger(s.ledger) };
     persist(); render(); say('Imported.');
   } catch (err) { say('Import failed: ' + err.message, true); }
   e.target.value = '';
