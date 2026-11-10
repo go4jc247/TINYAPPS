@@ -88,6 +88,9 @@ label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
     </div>
     <p class="mut" style="font-size:13px;margin:12px 0 0">Everything is stored only on this device, in this browser. Export a backup now and then.</p>
   </section>
+  <footer style="text-align:center;padding:6px 0 18px">
+    <a class="btn" id="homeLink" href="../">← Back to Tiny Apps</a>
+  </footer>
 </main>
 
 <script>
@@ -441,6 +444,11 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+$('homeLink').addEventListener('click', e => {
+  const unsaved = $('paste').value.trim();
+  const ok = confirm(unsaved ? 'Leave this app? The text you pasted has not been saved.' : 'Go back to the Tiny Apps home?');
+  if (!ok) e.preventDefault();
+});
 render();
 </script>
 </body>
