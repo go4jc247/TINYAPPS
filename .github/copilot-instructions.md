@@ -29,6 +29,20 @@ icon.png                Hub icon.
 - Every service worker in this repo uses the SAME cache name: `tiny-apps`. Do not change it,
   and do not create per-app cache names. Workers are network first, falling back to the cache offline.
 
+## The runner (`runner/`)
+
+A template app. The first launch asks the user to paste HTML or choose an HTML/text file; after that
+this copy loads that app every time with no prompt, so it simply becomes that app.
+- The pasted code is stored in localStorage under `runner:<folder name>:code`, and the app's own data
+  under `runner:<folder name>:state`. The folder name is the slot, so every copy needs its own folder.
+- The app runs in a sandboxed iframe (`srcdoc`). The runner injects a small shim (`shim()`) that gives
+  the app a `localStorage` that is saved by the runner (a hidden scratch pad), and sends link clicks to the runner.
+  Pasted apps need no code changes, as long as they use localStorage (not IndexedDB or their own service worker).
+- A small ⋯ button (bottom left) opens Save backup / Restore backup / Back to Tiny Apps.
+- To make another app: copy the whole `runner/` folder to a new folder name (for example `budget/`), then add
+  a hub entry for it in the root `index.html` `APPS` list. Do not edit the runner code per copy.
+- Do not add "reset" or "replace app" features unless asked.
+
 ## Rules
 
 - Every app lives in its own folder. Never mix one app's files into another's folder or the root.
@@ -39,7 +53,7 @@ icon.png                Hub icon.
 - Every app has a "← Back to Tiny Apps" button at the very bottom (a link to `../`) that asks the user
   to confirm with a pop-up (`confirm()`) before leaving, and warns if there is unsaved input. Copy it from `loan/index.html` (`#homeLink`).
 - Mobile first. Simple, readable, light and dark mode. Keep files small.
-- Icons: Existing icons are final. Never regenerate, redraw or recolor `icon.png` files. They already use the brand colors. Only add a new icon when creating a new app, and only if the user provides or asks for one.
+- Icons: PNG, 512x512, no more than three colors (brand blue `#0025b8`, green `#098a11`, white), as small as possible.
 
 ## Adding a new app
 

@@ -1,4 +1,5 @@
-// Offline helper for the landing page only. Network first, cache when offline.
+// Hub service worker (landing page). One shared cache name for the whole repo, so the hub can
+// refresh every app's files and each app's own worker reads the same up-to-date copies.
 const CACHE = 'tiny-apps';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon.png'];
 
@@ -10,13 +11,10 @@ self.addEventListener('activate', e => {
   e.waitUntil(self.clients.claim());
 });
 
+// Network first (updates arrive), cache when offline.
 self.addEventListener('fetch', e => {
   const req = e.request;
-  const url = new URL(req.url);
-  // Only handle the landing page itself; each app has its own worker.
-  const scopePath = new URL('./', location).pathname;
-  const isHome = [scopePath, scopePath + 'index.html', scopePath + 'manifest.webmanifest', scopePath + 'icon.png'].includes(url.pathname);
-  if (req.method !== 'GET' || url.origin !== location.origin || !isHome) return;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
     fetch(req)
       .then(res => {
@@ -24,6 +22,6 @@ self.addEventListener('fetch', e => {
         caches.open(CACHE).then(c => c.put(req, copy));
         return res;
       })
-      .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+      .catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('./index.html')))
   );
 });
