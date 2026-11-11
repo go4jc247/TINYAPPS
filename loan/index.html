@@ -297,7 +297,7 @@ function render() {
   const l = safeLink(state.link);
   $('linkbar').innerHTML = l
     ? '<a class="btn p s" href="' + esc(l) + '" target="_blank" rel="noopener noreferrer">Open loan site ↗</a>'
-    : '<a class="btn s" href="#link" onclick="document.getElementById(\'link\').focus()">Set link</a>';
+    : '<button class="btn s" type="button" onclick="var l=document.getElementById(\'link\');l.scrollIntoView({block:\'center\'});l.focus()">Set link</button>';
   $('link').value = state.link || '';
   $('labels').value = state.labels || '';
 

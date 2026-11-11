@@ -74,6 +74,8 @@ textarea{width:100%;min-height:220px;font:13px/1.4 ui-monospace,Menlo,Consolas,m
 
 <script>
 const $ = id => document.getElementById(id);
+// Safety: the runner must never run inside another page or inside itself.
+if (window.top !== window.self) { document.documentElement.textContent = ''; throw new Error('runner must not be framed'); }
 
 // Each copy of this runner lives in its own folder; the folder name is its storage slot.
 const dirs = location.pathname.split('/').filter(Boolean);
@@ -123,8 +125,14 @@ function shim(S) {
     var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
     if (!a) return;
     var h = a.getAttribute('href');
-    if (!h || h.charAt(0) === '#' || /^(javascript|mailto|tel|blob|data):/i.test(h)) return;
+    if (!h || /^(javascript|mailto|tel|blob|data):/i.test(h)) return;
     e.preventDefault();
+    if (h.charAt(0) === '#') {   // same-page jump: scroll here, never navigate (the page URL is not the app's own)
+      var id = h.slice(1); try { id = decodeURIComponent(id); } catch (x) {}
+      var t = id ? (document.getElementById(id) || document.getElementsByName(id)[0]) : document.documentElement;
+      if (t && t.scrollIntoView) t.scrollIntoView();
+      return;
+    }
     post({ t: 'open', href: h });
   }, false);
 }
