@@ -20,11 +20,11 @@ FILES IN THIS BUNDLE (13)
   - sw.js  (1000 bytes)
   - manifest.webmanifest  (292 bytes)
   - icon.png  (2105 bytes)
-  - loan/index.html  (26863 bytes)
+  - loan/index.html  (26919 bytes)
   - loan/sw.js  (905 bytes)
   - loan/manifest.webmanifest  (290 bytes)
   - loan/icon.png  (4516 bytes)
-  - runner/index.html  (11602 bytes)
+  - runner/index.html  (12159 bytes)
   - runner/sw.js  (887 bytes)
   - runner/manifest.webmanifest  (290 bytes)
   - runner/icon.png  (2235 bytes)
@@ -202,8 +202,8 @@ iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAMAAADDpiTIAAADAFBMVEUAJbgJihH///8AAAAAAAAAAAAA
 
 <<<<FILE: loan/index.html>>>>
 ENCODING: text
-BYTES: 26863
-SHA-256: 78d02ac0ca140a9f5523bc0fdb52ecd8bc8cd258a464d25695e9ae6f20ce8545
+BYTES: 26919
+SHA-256: 834da919d1c8e1439947a9e0026823df6b11d6c675f2fce58fab20dc344d1c31
 <<<<CONTENT>>>>
 <!DOCTYPE html>
 <html lang="en">
@@ -504,7 +504,7 @@ function render() {
   const l = safeLink(state.link);
   $('linkbar').innerHTML = l
     ? '<a class="btn p s" href="' + esc(l) + '" target="_blank" rel="noopener noreferrer">Open loan site ↗</a>'
-    : '<a class="btn s" href="#link" onclick="document.getElementById(\'link\').focus()">Set link</a>';
+    : '<button class="btn s" type="button" onclick="var l=document.getElementById(\'link\');l.scrollIntoView({block:\'center\'});l.focus()">Set link</button>';
   $('link').value = state.link || '';
   $('labels').value = state.labels || '';
 
@@ -727,8 +727,8 @@ iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAMAAADDpiTIAAADAFBMVEUAJbgJihH///8AAAAAAAAAAAAA
 
 <<<<FILE: runner/index.html>>>>
 ENCODING: text
-BYTES: 11602
-SHA-256: 3d28c8d5ae0798fd7cfabdca43fe4118a71f1c06aa77d423d49f8501183aec9b
+BYTES: 12159
+SHA-256: 10db7f7f57107ab4ab4b3d99ee603a5a00cc37241f5e4340a404770ca00a9d6a
 <<<<CONTENT>>>>
 <!DOCTYPE html>
 <html lang="en">
@@ -806,6 +806,8 @@ textarea{width:100%;min-height:220px;font:13px/1.4 ui-monospace,Menlo,Consolas,m
 
 <script>
 const $ = id => document.getElementById(id);
+// Safety: the runner must never run inside another page or inside itself.
+if (window.top !== window.self) { document.documentElement.textContent = ''; throw new Error('runner must not be framed'); }
 
 // Each copy of this runner lives in its own folder; the folder name is its storage slot.
 const dirs = location.pathname.split('/').filter(Boolean);
@@ -855,8 +857,14 @@ function shim(S) {
     var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
     if (!a) return;
     var h = a.getAttribute('href');
-    if (!h || h.charAt(0) === '#' || /^(javascript|mailto|tel|blob|data):/i.test(h)) return;
+    if (!h || /^(javascript|mailto|tel|blob|data):/i.test(h)) return;
     e.preventDefault();
+    if (h.charAt(0) === '#') {   // same-page jump: scroll here, never navigate (the page URL is not the app's own)
+      var id = h.slice(1); try { id = decodeURIComponent(id); } catch (x) {}
+      var t = id ? (document.getElementById(id) || document.getElementsByName(id)[0]) : document.documentElement;
+      if (t && t.scrollIntoView) t.scrollIntoView();
+      return;
+    }
     post({ t: 'open', href: h });
   }, false);
 }
