@@ -1,0 +1,1117 @@
+TINY APPS REPO BUNDLE
+=====================
+This one text file holds every file of the repo, like an uncompressed zip. Create (or replace) each
+file below at the path shown.
+
+RULES FOR COPILOT (follow exactly)
+1. Each file starts with a marker line that begins with four less-than signs and the word FILE, then the
+   path, and ends with a marker line reading END FILE. The exact file content sits between the marker
+   line CONTENT and the marker line END FILE (drop the single line break just before END FILE; it is only a separator).
+2. ENCODING: text   -> write the content as it is, character for character.
+   ENCODING: base64 -> decode the base64 into a binary file (a PNG image). Do not open, redraw or re-encode it.
+3. Do NOT reformat, fix, rename, improve, shorten or "clean up" anything. Copy it exactly, even if it looks odd.
+4. After saving each file, check its SHA-256 and byte size against the values given. If any do not match,
+   stop and tell me which file.
+5. Change no other files. When finished, list every file you created or replaced.
+6. If you can run Python, you may use the extractor at the bottom of this file instead of doing it by hand.
+
+FILES IN THIS BUNDLE (13)
+  - index.html  (4959 bytes)
+  - sw.js  (1000 bytes)
+  - manifest.webmanifest  (292 bytes)
+  - icon.png  (2105 bytes)
+  - loan/index.html  (26863 bytes)
+  - loan/sw.js  (905 bytes)
+  - loan/manifest.webmanifest  (290 bytes)
+  - loan/icon.png  (4516 bytes)
+  - runner/index.html  (11602 bytes)
+  - runner/sw.js  (887 bytes)
+  - runner/manifest.webmanifest  (290 bytes)
+  - runner/icon.png  (2235 bytes)
+  - .github/copilot-instructions.md  (5230 bytes)
+
+<<<<FILE: index.html>>>>
+ENCODING: text
+BYTES: 4959
+SHA-256: efb6e5375fdbccc419bebb3c98fd07034998c11a34ea54fb6796a1251661c66b
+<<<<CONTENT>>>>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0025b8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tiny Apps">
+<title>Tiny Apps</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1b1f24;--mut:#667085;--bd:#e3e6ea;--ac:#1f6feb;--ok:#1a7f37}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#171b22;--tx:#e6e9ee;--mut:#8b94a3;--bd:#262c36;--ac:#4c8dff;--ok:#3fb950}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:20px 14px}
+h1{font-size:24px;margin:8px 0 4px}
+.sub{color:var(--mut);margin:0 0 18px}
+.list{display:grid;gap:12px}
+a.app{display:flex;gap:14px;align-items:center;background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;color:inherit;text-decoration:none}
+a.app:active,a.app:hover{border-color:var(--ac)}
+.ic{font-size:30px;width:56px;height:56px;display:grid;place-items:center;background:var(--bg);border-radius:13px;flex:none;overflow:hidden}
+.ic img{width:100%;height:100%;display:block}
+.nm{font-weight:600}
+.ds{color:var(--mut);font-size:14px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:20px;color:var(--mut);font-size:13px}
+.btn{font:inherit;font-size:13px;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:6px 12px;border-radius:9px;cursor:pointer}
+.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Tiny Apps</h1>
+  <p class="sub">Small offline tools. Tap one to open it.</p>
+  <div class="list" id="list"></div>
+  <div class="bar"><span id="st"></span><button class="btn" id="upd">Check for updates</button></div>
+</main>
+<script>
+// ADD A NEW APP: put it in its own folder (index.html, sw.js, manifest.webmanifest, icon.png),
+// then add one entry here. The tile icon is always that folder's own icon.png (file + 'icon.png'). `files` = everything the app needs offline (so the hub can keep it fresh).
+const APPS = [
+  {
+    name: 'Loan Tracker', file: 'loan/',
+    desc: 'Paste loan details, track changes over time',
+    files: ['loan/', 'loan/index.html', 'loan/manifest.webmanifest', 'loan/icon.png']
+  },
+  {
+    name: 'App Runner', file: 'runner/',
+    desc: 'Paste or load any single-file HTML app and this copy becomes that app',
+    files: ['runner/', 'runner/index.html', 'runner/manifest.webmanifest', 'runner/icon.png']
+  },
+];
+const HUB_FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon.png'];
+const CACHE = 'tiny-apps'; // same name every worker in this repo uses
+const STAMP = 'tinyApps.lastUpdate';
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = id => document.getElementById(id);
+$('list').innerHTML = APPS.map(a =>
+  '<a class="app" href="' + esc(a.file) + '"><div class="ic">' +
+  '<img src="' + esc(a.file + 'icon.png') + '" alt="" onerror="this.replaceWith(\'📦\')">' +
+  '</div><div><div class="nm">' + esc(a.name) + '</div><div class="ds">' + esc(a.desc || '') + '</div></div></a>'
+).join('');
+
+function lastText() {
+  try { const t = +localStorage.getItem(STAMP); return t ? new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''; } catch (e) { return ''; }
+}
+// Re-download the hub and every app's files, bypassing the HTTP cache, and store them in the shared cache.
+async function refresh() {
+  if (!('caches' in window) || !/^https?:$/.test(location.protocol)) { $('st').textContent = 'Offline saving needs the hosted version.'; return; }
+  $('st').textContent = 'Checking…';
+  const urls = HUB_FILES.concat(APPS.flatMap(a => a.files || [a.file]));
+  let ok = 0;
+  try {
+    const c = await caches.open(CACHE);
+    await Promise.all(urls.map(async u => {
+      try { const r = await fetch(u, { cache: 'reload' }); if (r.ok) { await c.put(u, r); ok++; } } catch (e) {}
+    }));
+  } catch (e) {}
+  if (ok === urls.length) {
+    try { localStorage.setItem(STAMP, Date.now()); } catch (e) {}
+    $('st').innerHTML = '<span class="ok">Everything is up to date and saved offline.</span>';
+  } else if (ok === 0) {
+    $('st').textContent = 'Offline. Using saved copies' + (lastText() ? ' (updated ' + lastText() + ').' : '.');
+  } else {
+    $('st').textContent = 'Partly updated (' + ok + ' of ' + urls.length + ' files). Try again.';
+  }
+}
+$('upd').onclick = refresh;
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
+}
+refresh();
+</script>
+</body>
+</html>
+
+<<<<END FILE>>>>
+
+<<<<FILE: sw.js>>>>
+ENCODING: text
+BYTES: 1000
+SHA-256: cbacfbb4ea3bb5250489786cdfa2e1c29b21d1964fd7050912be5786301abe70
+<<<<CONTENT>>>>
+// Hub service worker (landing page). One shared cache name for the whole repo, so the hub can
+// refresh every app's files and each app's own worker reads the same up-to-date copies.
+const CACHE = 'tiny-apps';
+const FILES = ['./', './index.html', './manifest.webmanifest', './icon.png'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(self.clients.claim());
+});
+
+// Network first (updates arrive), cache when offline.
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  e.respondWith(
+    fetch(req)
+      .then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copy));
+        return res;
+      })
+      .catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('./index.html')))
+  );
+});
+
+<<<<END FILE>>>>
+
+<<<<FILE: manifest.webmanifest>>>>
+ENCODING: text
+BYTES: 292
+SHA-256: 94b797cf0e8887b3e949dc14cfe2b9ebabd484300cc2a7d004c215de04a8b924
+<<<<CONTENT>>>>
+{
+  "name": "Tiny Apps",
+  "short_name": "Tiny Apps",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0025b8",
+  "theme_color": "#0025b8",
+  "icons": [
+    { "src": "icon.png", "sizes": "192x192 512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
+
+<<<<END FILE>>>>
+
+<<<<FILE: icon.png>>>>
+ENCODING: base64
+BYTES: 2105
+SHA-256: 03508d74be7690afdde5874b302de5adc59614190f903e9211ec8f0c97ebae20
+<<<<CONTENT>>>>
+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
+<<<<END FILE>>>>
+
+<<<<FILE: loan/index.html>>>>
+ENCODING: text
+BYTES: 26863
+SHA-256: 78d02ac0ca140a9f5523bc0fdb52ecd8bc8cd258a464d25695e9ae6f20ce8545
+<<<<CONTENT>>>>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0025b8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Loan">
+<title>Loan Tracker</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1b1f24;--mut:#667085;--bd:#e3e6ea;--ac:#1f6feb;--ok:#1a7f37;--bad:#cf222e;--warn:#9a6700}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#171b22;--tx:#e6e9ee;--mut:#8b94a3;--bd:#262c36;--ac:#4c8dff;--ok:#3fb950;--bad:#f85149;--warn:#d29922}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;background:var(--card);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+h1{font-size:18px;margin:0}
+h2{font-size:15px;margin:0 0 10px}
+main{max-width:720px;margin:0 auto;padding:14px;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
+.btn{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:9px 14px;border-radius:9px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.p{background:var(--ac);border-color:var(--ac);color:#fff}
+.btn.s{padding:5px 10px;font-size:13px}
+.btn.d{color:var(--bad)}
+textarea,input[type=text],input[type=url]{width:100%;font:inherit;padding:10px;border:1px solid var(--bd);border-radius:9px;background:var(--bg);color:var(--tx)}
+textarea{min-height:150px;resize:vertical;font-size:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.k{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.03em}
+.v{font-size:17px;font-weight:600;word-break:break-word}
+.big{font-size:22px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.mut{color:var(--mut)}
+.chg{padding:8px 0;border-top:1px solid var(--bd);font-size:14px}
+.chg:first-child{border-top:0}
+.old{text-decoration:line-through;color:var(--mut)}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--bd);color:var(--mut)}
+.tag.on{color:var(--ok);border-color:var(--ok)}
+.snap{padding:10px 0;border-top:1px solid var(--bd)}
+.snap:first-of-type{border-top:0}
+.snap .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+details summary{cursor:pointer;color:var(--mut);font-size:13px;margin-top:4px}
+pre{white-space:pre-wrap;font-size:12px;background:var(--bg);padding:8px;border-radius:8px;overflow:auto}
+.pay{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--bd);font-size:14px}
+.pay:first-of-type{border-top:0}
+.pay .l{min-width:0}
+.pay .r{text-align:right;white-space:nowrap}
+.gs{color:var(--tx)!important;font-size:14px!important;font-weight:600;padding:8px 0;margin-top:0!important}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+#msg{font-size:14px;margin-top:8px;min-height:20px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🚗 Loan Tracker</h1>
+  <div id="linkbar"></div>
+</header>
+<main>
+  <section class="card" id="status"></section>
+
+  <section class="card">
+    <h2>Paste account details</h2>
+    <textarea id="paste" placeholder="Paste the account page text here…"></textarea>
+    <div class="row">
+      <button class="btn p" id="saveBtn">Save snapshot</button>
+      <button class="btn" id="clearBtn">Clear</button>
+    </div>
+    <div id="msg"></div>
+  </section>
+
+  <section class="card" id="changes"></section>
+  <section class="card" id="ledger"></section>
+  <section class="card" id="history"></section>
+
+  <section class="card">
+    <h2>Settings</h2>
+    <label for="link">Loan site link</label>
+    <input type="url" id="link" placeholder="https://your-lender.com/login">
+    <label for="labels">Extra field names to recognize (comma-separated)</label>
+    <input type="text" id="labels" placeholder="e.g. Current Balance, Next Payment Date">
+    <div class="row">
+      <button class="btn p" id="saveSet">Save settings</button>
+      <button class="btn" id="exportBtn">Export backup</button>
+      <button class="btn" id="importBtn">Import backup</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+    <p class="mut" style="font-size:13px;margin:12px 0 0">Everything is stored only on this device, in this browser. Export a backup now and then.</p>
+  </section>
+  <footer style="text-align:center;padding:6px 0 18px">
+    <a class="btn" id="homeLink" href="../">← Back to Tiny Apps</a>
+  </footer>
+</main>
+
+<script>
+const KEY = 'loanTracker.v1';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/*PARSER*/
+const BASE_LABELS = ['First Name','Last Name','Vehicle Description','Regular Payment Amount','Current Due Date','Days Past Due','Payoff Amount','Account Number','Current Balance','Principal Balance','Interest Rate','Last Payment Amount','Last Payment Date','Next Payment Date','Past Due Amount','Late Fee','Maturity Date','Payoff Date','Applied Interest To Date','Contract Term','Payments Remaining','APR(%)','APR'];
+// Inside a "Recurring Autopay Scheduled" block these labels mean the autopay's own values
+const AUTO = { 'next payment date': 'Autopay Next Date', 'account': 'Autopay Account', 'payment method': 'Autopay Method', 'payment amount': 'Autopay Amount', 'service fee': 'Autopay Fee', 'total amount': 'Autopay Total' };
+const pad = n => String(n).padStart(2, '0');
+function fmtDate(d) { return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '/' + pad(d.getFullYear() % 100); }
+function normDate(s, now) {
+  s = String(s).toLowerCase();
+  const d = new Date(now);
+  if (s === 'today') return fmtDate(d);
+  if (s === 'yesterday') { d.setDate(d.getDate() - 1); return fmtDate(d); }
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  return m ? pad(m[1]) + '/' + pad(m[2]) + '/' + (m[3].length === 4 ? m[3].slice(2) : m[3]) : s;
+}
+function parseText(raw, extra, now) {
+  now = now || Date.now();
+  const labels = BASE_LABELS.concat((extra || '').split(',').map(s => s.trim()).filter(Boolean));
+  const map = new Map(labels.map(l => [l.toLowerCase(), l]));
+  const lines = raw.replace(/\r/g, '').split('\n').map(s => s.trim()).filter(Boolean);
+  const fields = {}, payments = [], recent = [];
+  let autopay = '', mode = '', cur = null;
+  const dateRe = /^(\d{1,2}\/\d{1,2}\/\d{2,4})\s*(.*)$/;
+  const recRe = /^(today|yesterday|\d{1,2}\/\d{1,2}\/\d{2,4})\s*[—–-]+\s*(.+)$/i;
+  const amtRe = /^[-+]?\s*\$\s*[\d,]+(\.\d+)?$/;
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i], low = ln.toLowerCase();
+    if (low === 'view all' || low === 'account details') continue;
+    if (/^[.…·•\s]+$/.test(ln)) continue;
+    if (low === 'additional payment details') { mode = ''; cur = null; continue; }
+    if (low === 'upcoming payments') { mode = 'up'; cur = null; continue; }
+    if (/^(recent\b.*|all)\s*payments$/i.test(ln)) { mode = 'rec'; cur = null; continue; }
+    if (/^recurring autopay/i.test(ln)) { mode = 'auto'; cur = null; continue; }
+    if (/^pay every\b/i.test(ln)) { fields['Autopay Schedule'] = ln; continue; }
+    if (/^autopay\s+(on|off)$/i.test(ln)) { autopay = ln.toUpperCase(); continue; }
+    if ((mode === 'up' || mode === 'rec') && map.has(low)) { mode = ''; cur = null; }
+    if (mode === 'up') {
+      const m = ln.match(dateRe);
+      if (m) { cur = { date: normDate(m[1], now), type: m[2], account: '', amount: '' }; payments.push(cur); continue; }
+      if (cur) {
+        if (amtRe.test(ln)) cur.amount = ln;
+        else cur.account = cur.account ? cur.account + ' ' + ln : ln;
+      }
+      continue;
+    }
+    if (mode === 'rec') {
+      const m = ln.match(recRe);
+      if (m) {
+        const parts = m[2].split(/\s*[—–]\s*|\s+-\s+/).map(x => x.trim()).filter(Boolean);
+        cur = { date: normDate(m[1], now), status: parts[0] || m[2].trim(), note: parts.slice(1).join(' · '), account: '', amount: '' };
+        recent.push(cur); continue;
+      }
+      if (cur) {
+        if (amtRe.test(ln)) cur.amount = ln;
+        else cur.account = cur.account ? cur.account + ' ' + ln : ln;
+      }
+      continue;
+    }
+    const lab = k => (mode === 'auto' && AUTO[k]) || map.get(k);
+    const c = ln.indexOf(':');
+    if (c > 0 && lab(ln.slice(0, c).trim().toLowerCase())) {
+      fields[lab(ln.slice(0, c).trim().toLowerCase())] = ln.slice(c + 1).trim();
+      continue;
+    }
+    if (lab(low)) {
+      const nxt = lines[i + 1];
+      if (nxt !== undefined && !lab(nxt.toLowerCase()) && !/^((upcoming|recent|all)\b.*payments|recurring autopay.*|additional payment details)$/i.test(nxt)) {
+        fields[lab(low)] = nxt; i++;
+      }
+    }
+  }
+  return { fields, payments, autopay, recent };
+}
+const DAY = 86400000;
+const dayStart = t => { const d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+// "-", "—/—/—", "N/A" count as empty, so they never overwrite a real value
+const isBlank = v => /^[\s\-—–\/]*$/.test(String(v == null ? '' : v)) || /^n\/?a$/i.test(String(v).trim());
+// Current picture = every snapshot layered oldest to newest. A newer paste wins on conflicts;
+// anything a newer paste leaves out is kept from the older ones.
+function mergedState(snaps, upto) {
+  const m = { fields: {}, ts: {}, payments: [], paymentsTs: 0, autopay: '' };
+  for (let i = 0; i <= upto && i < snaps.length; i++) {
+    const s = snaps[i];
+    for (const k in s.fields) {
+      if (isBlank(s.fields[k]) && m.fields[k] !== undefined) continue;
+      m.fields[k] = s.fields[k]; m.ts[k] = s.ts;
+    }
+    if (s.payments && s.payments.length) { m.payments = s.payments; m.paymentsTs = s.ts; }
+    if (s.autopay) m.autopay = s.autopay;
+  }
+  return m;
+}
+function parseDue(v) {
+  const m = String(v || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return null;
+  return new Date(m[3].length === 4 ? +m[3] : 2000 + +m[3], +m[1] - 1, +m[2]).getTime();
+}
+// Days relative to the due date as of "now". Negative = days until due, positive = days past due.
+// Uses whichever of "Days Past Due" / "Current Due Date" was pasted most recently (a tie goes to
+// the lender's own Days Past Due number, moved forward by the days since that paste).
+function daysNow(m, now) {
+  const pd = parseInt(m.fields['Days Past Due'], 10), pts = m.ts['Days Past Due'];
+  const due = parseDue(m.fields['Current Due Date']), dts = m.ts['Current Due Date'];
+  const hasPd = !isNaN(pd) && pts;
+  if (due !== null && (!hasPd || dts > pts)) return { n: Math.round((dayStart(now) - due) / DAY), src: 'due' };
+  if (hasPd) return { n: pd + Math.round((dayStart(now) - dayStart(pts)) / DAY), src: 'paste' };
+  return null;
+}
+function payStr(p) { return [p.date, p.type, p.account, p.amount].filter(Boolean).join(' · '); }
+function recStr(r) { return [r.date, r.status, r.note, r.amount, r.account].filter(Boolean).join(' · '); }
+function diffSnaps(a, b) {
+  const out = [];
+  const keys = [...new Set([...Object.keys(a ? a.fields : {}), ...Object.keys(b.fields)])];
+  for (const k of keys) {
+    const o = a ? a.fields[k] : undefined, n = b.fields[k];
+    if (o !== n) {
+      // the days count moves on its own each day, so don't report it as a change
+      if (k === 'Days Past Due' && a && a.ts[k] && b.ts[k] && parseInt(o, 10) + Math.round((dayStart(b.ts[k]) - dayStart(a.ts[k])) / DAY) === parseInt(n, 10)) continue;
+      out.push({ k, o, n });
+    }
+  }
+  if ((a ? a.autopay : '') !== b.autopay) out.push({ k: 'Autopay', o: a ? a.autopay : undefined, n: b.autopay });
+  const po = a ? a.payments.map(payStr) : [], pn = b.payments.map(payStr);
+  pn.filter(x => !po.includes(x)).forEach(x => out.push({ k: 'Upcoming payment', o: undefined, n: x }));
+  po.filter(x => !pn.includes(x)).forEach(x => out.push({ k: 'Upcoming payment', o: x, n: undefined }));
+  return out;
+}
+// Payment log: adds only payments not already logged. The same date + account + amount is the
+// same payment, whichever list it came from (Recent or All Payments). A second identical one in
+// the SAME paste counts as a genuine extra payment.
+const normAcct = a => String(a || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const ledgerBase = e => [e.date, normAcct(e.account), String(e.amount || '').replace(/\s+/g, '')].join('|');
+function fixLedger(l) {
+  const cnt = {};
+  return (Array.isArray(l) ? l : []).slice().sort((x, y) => (x.added || 0) - (y.added || 0)).map(e => {
+    const b = ledgerBase(e); cnt[b] = (cnt[b] || 0) + 1; e.id = b + '#' + cnt[b]; return e;
+  });
+}
+function mergeLedger(ledger, recent, ts) {
+  const counts = {}, logged = [];
+  for (const r of recent) {
+    const base = ledgerBase(r);
+    const k = counts[base] = (counts[base] || 0) + 1;
+    const id = base + '#' + k;
+    const ex = ledger.find(e => e.id === id);
+    if (!ex) {
+      ledger.push({ id, date: r.date, status: r.status, note: r.note || '', account: r.account, amount: r.amount, added: ts });
+      logged.push({ kind: 'new', entry: recStr(r) });
+    } else {
+      if (!ex.note && r.note) ex.note = r.note;
+      if (ex.status !== r.status) { logged.push({ kind: 'status', from: ex.status, entry: recStr(r) }); ex.status = r.status; }
+    }
+  }
+  return logged;
+}
+function loggedChanges(s) {
+  return (s.logged || []).map(l => l.kind === 'new'
+    ? { k: 'Payment logged', o: undefined, n: l.entry }
+    : { k: 'Payment status', o: l.from, n: l.entry });
+}
+const dateVal = d => { const m = String(d).match(/^(\d\d)\/(\d\d)\/(\d\d)$/); return m ? +('20' + m[3] + m[1] + m[2]) : 0; };
+/*END_PARSER*/
+
+let state = load();
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.snaps)) { s.ledger = fixLedger(s.ledger); return s; } } catch (e) {}
+  return { link: '', labels: '', snaps: [], ledger: [] };
+}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); return true; }
+  catch (e) { say('Could not save: ' + e.message, true); return false; }
+}
+function say(t, bad) { $('msg').innerHTML = '<span class="' + (bad ? 'bad' : 'ok') + '">' + esc(t) + '</span>'; }
+
+function safeLink(u) {
+  u = (u || '').trim(); if (!u) return '';
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = 'https://' + u;
+  return /^https?:\/\//i.test(u) ? u : '';
+}
+function money(s) { const m = String(s || '').replace(/,/g, '').match(/-?\$?\s*(-?\d+(\.\d+)?)/); return m ? parseFloat(m[1]) : null; }
+function fmtDelta(o, n) {
+  const a = money(o), b = money(n);
+  if (a == null || b == null || a === b || !/\$/.test(o + n)) return '';
+  const d = b - a;
+  return ' <span class="' + (d < 0 ? 'ok' : 'warn') + '">(' + (d > 0 ? '+' : '−') + '$' + Math.abs(d).toFixed(2) + ')</span>';
+}
+function daysInfo(v) {
+  const n = parseInt(v, 10);
+  if (isNaN(n)) return { t: v || '—', c: '' };
+  if (n < 0) return { t: (-n) + ' day' + (n === -1 ? '' : 's') + ' until due', c: 'ok' };
+  if (n === 0) return { t: 'Due today', c: 'warn' };
+  return { t: n + ' day' + (n === 1 ? '' : 's') + ' past due', c: 'bad' };
+}
+const when = ts => new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+
+let showAll = false;
+function render() {
+  const l = safeLink(state.link);
+  $('linkbar').innerHTML = l
+    ? '<a class="btn p s" href="' + esc(l) + '" target="_blank" rel="noopener noreferrer">Open loan site ↗</a>'
+    : '<a class="btn s" href="#link" onclick="document.getElementById(\'link\').focus()">Set link</a>';
+  $('link').value = state.link || '';
+  $('labels').value = state.labels || '';
+
+  const snaps = state.snaps, last = snaps[snaps.length - 1], prev = snaps[snaps.length - 2];
+  const st = $('status');
+  if (!last) {
+    st.innerHTML = '<h2>Current status</h2><p class="mut" style="margin:0">Nothing saved yet. Paste your account details below and tap Save snapshot.</p>';
+  } else {
+    const M = mergedState(snaps, snaps.length - 1), f = M.fields, dn = daysNow(M, Date.now()), d = dn ? daysInfo(dn.n) : { t: '—', c: '' };
+    const show = (k, label, cls) => f[k] === undefined ? '' : '<div><div class="k">' + label + '</div><div class="v ' + (cls || '') + '">' + esc(f[k]) + '</div></div>';
+    const nxt = M.payments[0];
+    const oldN = Object.keys(M.ts).filter(k => M.ts[k] !== last.ts).length;
+    const carry = oldN ? ' · ' + oldN + ' value' + (oldN > 1 ? 's' : '') + ' kept from earlier pastes' : '';
+    const dOnly = t => new Date(t).toLocaleDateString([], { dateStyle: 'medium' });
+    const apKeys = ['Autopay Schedule', 'Autopay Next Date', 'Autopay Amount', 'Autopay Fee', 'Autopay Total', 'Autopay Method', 'Autopay Account'].filter(k => f[k] !== undefined);
+    const apHtml = apKeys.length ? '<div class="k" style="margin-top:14px">Autopay details</div>' + apKeys.map(k => '<div class="chg" style="padding:5px 0"><span class="mut">' + esc(k.replace('Autopay ', '')) + ':</span> ' + esc(f[k]) + '</div>').join('') : '';
+    st.innerHTML = '<h2>Current status <span class="mut" style="font-weight:400">· saved ' + esc(when(last.ts)) + '</span></h2>' +
+      '<div class="v big ' + d.c + '">' + esc(d.t) + '</div><div class="mut" style="font-size:12px;margin:2px 0 12px">' +
+      esc((dn ? (dn.src === 'due' ? 'Counted from the due date' : 'Counted from your paste on ' + dOnly(M.ts['Days Past Due'])) + ' · updates daily' : 'Paste includes no days or due date') + carry) + '</div>' +
+      '<div class="grid">' +
+      show('Current Due Date', 'Due date') + show('Regular Payment Amount', 'Payment') +
+      show('Payoff Amount', 'Payoff') + show('Vehicle Description', 'Vehicle') +
+      show('Current Balance', 'Balance') + show('Past Due Amount', 'Past due amount', 'bad') +
+      show('APR(%)', 'APR %') + show('APR', 'APR %') + show('Contract Term', 'Term (months)') + show('Payments Remaining', 'Payments left') +
+      show('Applied Interest To Date', 'Interest to date') + show('Payoff Date', 'Payoff date') +
+      (nxt ? '<div><div class="k">Next autopay</div><div class="v">' + esc(nxt.date + (nxt.amount ? ' · ' + nxt.amount : '')) + '</div></div>' : '') +
+      (M.autopay ? '<div><div class="k">Autopay</div><div class="v"><span class="tag ' + (/ON/.test(M.autopay) ? 'on' : '') + '">' + esc(M.autopay) + '</span></div></div>' : '') +
+      '</div>' + apHtml;
+  }
+
+  const ch = $('changes');
+  if (!last) ch.style.display = 'none';
+  else {
+    ch.style.display = '';
+    const dd = (prev ? diffSnaps(mergedState(snaps, snaps.length - 2), mergedState(snaps, snaps.length - 1)) : []).concat(loggedChanges(last));
+    const title = prev ? 'Changes since previous snapshot' : 'First snapshot';
+    ch.innerHTML = dd.length
+      ? '<details><summary class="gs" style="margin:0;padding:0">' + title + ' (' + dd.length + ')</summary><div style="margin-top:8px">' + dd.map(chgHtml).join('') + '</div></details>'
+      : '<h2>' + title + '</h2>' + (!prev ? '<span class="mut">Paste again later to see what changed.</span>' : '<span class="ok">No changes.</span>');
+  }
+
+  const lg = $('ledger'), L = state.ledger.slice().sort((a, b) => dateVal(b.date) - dateVal(a.date) || b.added - a.added);
+  if (!L.length) lg.style.display = 'none';
+  else {
+    lg.style.display = '';
+    const isDone = e => /complete/i.test(e.status);
+    const sum = es => es.filter(isDone).reduce((t, e) => t + (money(e.amount) || 0), 0);
+    const fees = L.reduce((t, e) => { const m = (e.note || '').match(/\$\s*([\d,]+(\.\d+)?)/); return t + (m ? parseFloat(m[1].replace(/,/g, '')) : 0); }, 0);
+    const pend = L.filter(e => !isDone(e)).length;
+    const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const row = e => '<div class="pay"><div class="l"><strong>' + esc(e.date) + '</strong> <span class="' + (isDone(e) ? 'ok' : 'warn') + '">' + esc(e.status) + '</span>' +
+      '<div class="mut" style="font-size:13px">' + esc(e.account) + (e.note ? ' · ' + esc(e.note) : '') + '</div></div><div class="r"><strong>' + esc(e.amount) + '</strong><br>' +
+      '<button class="btn s d" data-ldel="' + esc(e.id) + '">✕</button></div></div>';
+    const stat = (k, v) => '<div><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
+    let body;
+    if (!showAll) body = '<div class="k" style="margin:14px 0 2px">Latest</div>' + L.slice(0, 5).map(row).join('');
+    else {
+      const G = {};
+      L.forEach(e => { const k = String(dateVal(e.date)).slice(0, 6); (G[k] = G[k] || []).push(e); });
+      body = Object.keys(G).sort().reverse().map((k, i) => {
+        const es = G[k], name = k.length === 6 ? MON[+k.slice(4) - 1] + ' ' + k.slice(0, 4) : 'Unknown date';
+        return '<details' + (i === 0 ? ' open' : '') + '><summary class="gs">' + name + ' · ' + es.length + ' payment' + (es.length > 1 ? 's' : '') + ' · $' + sum(es).toFixed(2) + '</summary>' + es.map(row).join('') + '</details>';
+      }).join('');
+    }
+    lg.innerHTML = '<h2>Payment log</h2><div class="grid">' +
+      stat('Payments', L.length) + stat('Total paid', '$' + sum(L).toFixed(2)) +
+      (fees ? stat('Fees listed', '$' + fees.toFixed(2)) : '') + (pend ? stat('Pending', pend) : '') +
+      stat('First payment', esc(L[L.length - 1].date)) + stat('Latest', esc(L[0].date)) + '</div>' + body +
+      '<div class="row"><button class="btn' + (showAll ? '' : ' p') + '" id="moreBtn">' + (showAll ? 'Hide full list' : 'View all payments (' + L.length + ')') + '</button></div>';
+  }
+
+  const h = $('history');
+  if (!snaps.length) h.style.display = 'none';
+  else {
+    h.style.display = '';
+    h.innerHTML = '<h2>History (' + snaps.length + ')</h2>' + snaps.slice().reverse().map(s => {
+      const i = snaps.indexOf(s), dd = (i > 0 ? diffSnaps(mergedState(snaps, i - 1), mergedState(snaps, i)) : []).concat(loggedChanges(s));
+      return '<div class="snap"><div class="top"><strong>' + esc(when(s.ts)) + '</strong>' +
+        '<button class="btn s d" data-del="' + esc(s.id) + '">Delete</button></div>' +
+        '<div class="mut" style="font-size:13px">' + ((i === 0 ? 'First snapshot · ' : '') + (dd.length ? dd.length + ' change' + (dd.length > 1 ? 's' : '') : 'No changes')) + '</div>' +
+        (dd.length ? '<details><summary>Show changes</summary>' + dd.map(chgHtml).join('') + '</details>' : '') +
+        '<details><summary>Raw paste</summary><pre>' + esc(s.raw) + '</pre></details></div>';
+    }).join('');
+  }
+}
+function chgHtml(c) {
+  const o = c.o === undefined ? '' : '<span class="old">' + esc(c.o || '(blank)') + '</span> → ';
+  const n = c.n === undefined ? '<span class="bad">removed</span>' : '<strong>' + esc(c.n || '(blank)') + '</strong>';
+  return '<div class="chg"><div class="k">' + esc(c.k) + '</div>' + (c.o === undefined && c.n !== undefined ? '<span class="ok">new</span> ' : '') + o + n + (c.o !== undefined && c.n !== undefined ? fmtDelta(c.o, c.n) : '') + '</div>';
+}
+
+$('saveBtn').onclick = () => {
+  const raw = $('paste').value.trim();
+  if (!raw) return say('Paste something first.', true);
+  const now = Date.now(), p = parseText(raw, state.labels, now);
+  if (!Object.keys(p.fields).length && !p.payments.length && !p.recent.length) return say('No known fields found. Add the field names under Settings.', true);
+  const backup = JSON.stringify(state.ledger);
+  const logged = mergeLedger(state.ledger, p.recent, now);
+  state.snaps.push({ id: now.toString(36) + Math.random().toString(36).slice(2, 6), ts: now, fields: p.fields, payments: p.payments, autopay: p.autopay, logged, raw });
+  if (persist()) {
+    $('paste').value = ''; render();
+    const dup = p.recent.length - logged.filter(l => l.kind === 'new').length;
+    say('Saved. ' + logged.filter(l => l.kind === 'new').length + ' new payment(s) logged' + (dup > 0 ? ', ' + dup + ' already logged (skipped).' : '.'));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } else { state.snaps.pop(); state.ledger = JSON.parse(backup); }
+};
+$('clearBtn').onclick = () => { $('paste').value = ''; $('msg').innerHTML = ''; };
+$('saveSet').onclick = () => {
+  state.link = $('link').value.trim(); state.labels = $('labels').value.trim();
+  if (state.link && !safeLink(state.link)) return say('Link must be a web address.', true);
+  if (persist()) { render(); say('Settings saved.'); }
+};
+$('history').addEventListener('click', e => {
+  const id = e.target.getAttribute && e.target.getAttribute('data-del');
+  if (id && confirm('Delete this snapshot?')) { state.snaps = state.snaps.filter(s => s.id !== id); persist(); render(); }
+});
+$('ledger').addEventListener('click', e => {
+  const t = e.target;
+  if (t.id === 'moreBtn') { showAll = !showAll; render(); return; }
+  const id = t.getAttribute && t.getAttribute('data-ldel');
+  if (id && confirm('Remove this payment from the log?')) { state.ledger = state.ledger.filter(x => x.id !== id); persist(); render(); }
+});
+$('exportBtn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
+  a.download = 'loan-tracker-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+$('importBtn').onclick = () => $('importFile').click();
+$('importFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const s = JSON.parse(await f.text());
+    if (!s || !Array.isArray(s.snaps)) throw new Error('Not a backup file');
+    if (!confirm('Replace current data with this backup (' + s.snaps.length + ' snapshots)?')) return;
+    state = { link: s.link || '', labels: s.labels || '', snaps: s.snaps, ledger: fixLedger(s.ledger) };
+    persist(); render(); say('Imported.');
+  } catch (err) { say('Import failed: ' + err.message, true); }
+  e.target.value = '';
+};
+
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+$('homeLink').addEventListener('click', e => {
+  const unsaved = $('paste').value.trim();
+  const ok = confirm(unsaved ? 'Leave this app? The text you pasted has not been saved.' : 'Go back to the Tiny Apps home?');
+  if (!ok) e.preventDefault();
+});
+render();
+</script>
+</body>
+</html>
+
+<<<<END FILE>>>>
+
+<<<<FILE: loan/sw.js>>>>
+ENCODING: text
+BYTES: 905
+SHA-256: 6981b03587f5b8c311c72f0f379053b14de30b8ce94a0d76359e984376f71db7
+<<<<CONTENT>>>>
+// Offline helper for the Loan Tracker (this folder only).
+const CACHE = 'tiny-apps'; // shared repo-wide cache name (the hub refreshes it)
+const FILES = ['./', './index.html', './manifest.webmanifest', './icon.png'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(self.clients.claim());
+});
+
+// Network first (updates arrive), cache when offline.
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  e.respondWith(
+    fetch(req)
+      .then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copy));
+        return res;
+      })
+      .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+  );
+});
+
+<<<<END FILE>>>>
+
+<<<<FILE: loan/manifest.webmanifest>>>>
+ENCODING: text
+BYTES: 290
+SHA-256: 38099cf9d87237d4f6f96653d4b5a247316e3b3b6c6b41ed9914a82da2eb2a48
+<<<<CONTENT>>>>
+{
+  "name": "Loan Tracker",
+  "short_name": "Loan",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0025b8",
+  "theme_color": "#0025b8",
+  "icons": [
+    { "src": "icon.png", "sizes": "192x192 512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
+
+<<<<END FILE>>>>
+
+<<<<FILE: loan/icon.png>>>>
+ENCODING: base64
+BYTES: 4516
+SHA-256: f43afd9b17771bad8113b7f9296d871e0fb9972f6d7825e9ad749578697ada30
+<<<<CONTENT>>>>
+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
+<<<<END FILE>>>>
+
+<<<<FILE: runner/index.html>>>>
+ENCODING: text
+BYTES: 11602
+SHA-256: 3d28c8d5ae0798fd7cfabdca43fe4118a71f1c06aa77d423d49f8501183aec9b
+<<<<CONTENT>>>>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0025b8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.png" type="image/png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Runner">
+<title>App Runner</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--tx:#1b1f24;--mut:#667085;--bd:#e3e6ea;--ac:#0025b8;--ok:#1a7f37;--bad:#cf222e}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#171b22;--tx:#e6e9ee;--mut:#8b94a3;--bd:#262c36;--ac:#4c8dff;--ok:#3fb950;--bad:#f85149}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+#frame{position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff}
+#setup{max-width:720px;margin:0 auto;padding:18px 14px;display:grid;gap:12px}
+h1{font-size:22px;margin:6px 0 0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
+.mut{color:var(--mut);font-size:14px}
+textarea{width:100%;min-height:220px;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;padding:10px;border:1px solid var(--bd);border-radius:9px;background:var(--bg);color:var(--tx);resize:vertical}
+.btn{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:10px 14px;border-radius:9px;cursor:pointer;text-decoration:none;display:inline-block}
+.btn.p{background:var(--ac);border-color:var(--ac);color:#fff}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+#msg{min-height:20px;font-size:14px;margin-top:8px}
+.bad{color:var(--bad)}.ok{color:var(--ok)}
+#menuBtn{position:fixed;left:8px;bottom:calc(8px + env(safe-area-inset-bottom));width:32px;height:32px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;font-size:18px;line-height:32px;padding:0;opacity:.35;z-index:5;cursor:pointer}
+#menuBtn:hover,#menuBtn:focus{opacity:.9}
+#sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+#sheet .in{background:var(--card);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px;display:grid;gap:10px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:56px;background:#000c;color:#fff;padding:8px 14px;border-radius:9px;font-size:14px;z-index:20}
+</style>
+</head>
+<body>
+
+<div id="setup" hidden>
+  <h1>App Runner</h1>
+  <div class="card">
+    <p style="margin-top:0">Paste the HTML of your app, or choose an HTML or text file. This copy then becomes that app and opens it every time, with no prompt.</p>
+    <textarea id="paste" placeholder="Paste the full HTML here…" spellcheck="false"></textarea>
+    <div class="row">
+      <button class="btn" id="pickBtn">Choose file…</button>
+      <input type="file" id="file" accept=".html,.htm,.txt,text/html,text/plain" hidden>
+      <button class="btn p" id="saveBtn">Save and run</button>
+    </div>
+    <div id="msg"></div>
+    <p class="mut" style="margin-bottom:0">Saved only on this device. Its data is saved automatically too.</p>
+  </div>
+  <div class="row" style="justify-content:center;margin-top:0">
+    <a class="btn" id="homeLink" href="../">← Back to Tiny Apps</a>
+  </div>
+</div>
+
+<iframe id="frame" hidden title="App"
+  sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-downloads"></iframe>
+<button id="menuBtn" hidden aria-label="Runner menu">⋯</button>
+
+<div id="sheet" hidden>
+  <div class="in">
+    <strong>App Runner</strong>
+    <div class="mut" id="info"></div>
+    <button class="btn p" id="bkBtn">Save backup (code + data)</button>
+    <button class="btn" id="rsBtn">Restore backup</button>
+    <input type="file" id="rsFile" accept="application/json,.json" hidden>
+    <a class="btn" id="homeLink2" href="../" style="text-align:center">← Back to Tiny Apps</a>
+    <button class="btn" id="closeBtn">Close</button>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// Each copy of this runner lives in its own folder; the folder name is its storage slot.
+const dirs = location.pathname.split('/').filter(Boolean);
+if (dirs.length && /\.[a-z0-9]+$/i.test(dirs[dirs.length - 1])) dirs.pop();
+const SLOT = (dirs.pop() || 'root').toLowerCase();
+const K_CODE = 'runner:' + SLOT + ':code', K_STATE = 'runner:' + SLOT + ':state';
+
+const getLS = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+function setLS(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+function readState() { try { const s = JSON.parse(getLS(K_STATE) || '{}'); return s && typeof s === 'object' ? s : {}; } catch (e) { return {}; } }
+
+let curState = readState(), pending = null, timer = 0;
+function toast(t) {
+  const d = document.createElement('div'); d.id = 'toast'; d.textContent = t; document.body.appendChild(d);
+  setTimeout(() => d.remove(), 3500);
+}
+function flush() {
+  clearTimeout(timer);
+  if (pending === null) return;
+  const ok = setLS(K_STATE, JSON.stringify(pending));
+  pending = null;
+  if (!ok) toast('Could not save: storage is full or blocked');
+}
+addEventListener('pagehide', flush);
+document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+
+// ---- Runs inside the pasted app (before its own scripts). Gives it a saved localStorage and
+// ---- hands link clicks to the runner. Must be self-contained: it is converted to text.
+function shim(S) {
+  function post(m) { try { m.runner = 1; parent.postMessage(m, '*'); } catch (e) {} }
+  function mk(persist) {
+    var d = persist ? S : {};
+    var api = {
+      getItem: function (k) { return Object.prototype.hasOwnProperty.call(d, k) ? d[k] : null; },
+      setItem: function (k, v) { d[k] = String(v); if (persist) post({ t: 'save', state: d }); },
+      removeItem: function (k) { delete d[k]; if (persist) post({ t: 'save', state: d }); },
+      clear: function () { for (var k in d) delete d[k]; if (persist) post({ t: 'save', state: d }); },
+      key: function (i) { return Object.keys(d)[i] || null; }
+    };
+    Object.defineProperty(api, 'length', { get: function () { return Object.keys(d).length; } });
+    return api;
+  }
+  try { Object.defineProperty(window, 'localStorage', { value: mk(true), configurable: true }); } catch (e) {}
+  try { Object.defineProperty(window, 'sessionStorage', { value: mk(false), configurable: true }); } catch (e) {}
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button) return;
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    var h = a.getAttribute('href');
+    if (!h || h.charAt(0) === '#' || /^(javascript|mailto|tel|blob|data):/i.test(h)) return;
+    e.preventDefault();
+    post({ t: 'open', href: h });
+  }, false);
+}
+function inject(code, state) {
+  const json = JSON.stringify(state).replace(/</g, '\\u003c');
+  const tag = '<script>(' + shim.toString() + ')(' + json + ');<\/script>';
+  let m;
+  if ((m = code.match(/<head[^>]*>/i))) return code.slice(0, m.index + m[0].length) + tag + code.slice(m.index + m[0].length);
+  if ((m = code.match(/^\s*<!doctype[^>]*>\s*(<html[^>]*>)?/i))) return code.slice(0, m[0].length) + tag + code.slice(m[0].length);
+  if ((m = code.match(/<html[^>]*>/i))) return code.slice(0, m.index + m[0].length) + tag + code.slice(m.index + m[0].length);
+  return tag + code;
+}
+
+const frame = $('frame');
+function run(code) {
+  curState = readState();
+  frame.srcdoc = inject(code, curState);
+  frame.hidden = false; $('menuBtn').hidden = false; $('setup').hidden = true;
+  const t = code.match(/<title[^>]*>([^<]*)<\/title>/i);
+  document.title = (t && t[1].trim()) || 'App Runner';
+}
+
+addEventListener('message', e => {
+  if (e.source !== frame.contentWindow) return;
+  const d = e.data;
+  if (!d || !d.runner) return;
+  if (d.t === 'save' && d.state && typeof d.state === 'object') {
+    curState = d.state; pending = d.state;
+    clearTimeout(timer); timer = setTimeout(flush, 400);
+  } else if (d.t === 'open' && typeof d.href === 'string') {
+    let u; try { u = new URL(d.href, location.href); } catch (err) { return; }
+    if (!/^https?:$/.test(u.protocol)) return;
+    if (u.origin === location.origin) { flush(); location.href = u.href; }
+    else window.open(u.href, '_blank', 'noopener');
+  }
+});
+
+// ---- first launch: paste or choose a file
+$('pickBtn').onclick = () => $('file').click();
+$('file').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  $('paste').value = await f.text(); $('msg').textContent = f.name + ' loaded. Tap Save and run.'; e.target.value = '';
+};
+$('saveBtn').onclick = () => {
+  const code = $('paste').value;
+  if (code.trim().length < 20 || code.indexOf('<') < 0) { $('msg').innerHTML = '<span class="bad">That doesn\'t look like HTML.</span>'; return; }
+  if (!setLS(K_CODE, code)) { $('msg').innerHTML = '<span class="bad">Could not save: too large or storage blocked.</span>'; return; }
+  run(code);
+};
+function goHome(e) {
+  const unsaved = !$('setup').hidden && $('paste').value.trim();
+  if (!confirm(unsaved ? 'Leave? The HTML you pasted has not been saved.' : 'Go back to the Tiny Apps home?')) e.preventDefault();
+  else flush();
+}
+$('homeLink').addEventListener('click', goHome);
+$('homeLink2').addEventListener('click', goHome);
+
+// ---- small menu: backup and restore
+$('menuBtn').onclick = () => {
+  const kb = n => (n / 1024).toFixed(1) + ' KB';
+  $('info').textContent = 'Slot: ' + SLOT + ' · app ' + kb((getLS(K_CODE) || '').length) + ' · data ' + kb(JSON.stringify(curState).length);
+  $('sheet').hidden = false;
+};
+$('closeBtn').onclick = () => { $('sheet').hidden = true; };
+$('sheet').onclick = e => { if (e.target === $('sheet')) $('sheet').hidden = true; };
+$('bkBtn').onclick = () => {
+  flush();
+  const data = { runner: 1, slot: SLOT, savedAt: new Date().toISOString(), code: getLS(K_CODE) || '', state: curState };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  a.download = SLOT + '-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+$('rsBtn').onclick = () => $('rsFile').click();
+$('rsFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!d || d.runner !== 1 || typeof d.code !== 'string' || !d.code) throw new Error('Not a runner backup');
+    if (!confirm('Replace this app and its data with the backup from ' + (d.savedAt || 'unknown date') + '?')) return;
+    if (!setLS(K_CODE, d.code) || !setLS(K_STATE, JSON.stringify(d.state || {}))) throw new Error('Could not save (storage full)');
+    location.reload();
+  } catch (err) { alert('Restore failed: ' + err.message); }
+  e.target.value = '';
+};
+
+// ---- start
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
+}
+const saved = getLS(K_CODE);
+if (saved) run(saved); else $('setup').hidden = false;
+</script>
+</body>
+</html>
+
+<<<<END FILE>>>>
+
+<<<<FILE: runner/sw.js>>>>
+ENCODING: text
+BYTES: 887
+SHA-256: a6f9fa6329ddbf39e977c3237fb7a9d77a0ada028ed24fec119821c414650f0e
+<<<<CONTENT>>>>
+// Offline helper for the App Runner (this folder only). Uses the repo-wide shared cache name.
+const CACHE = 'tiny-apps';
+const FILES = ['./', './index.html', './manifest.webmanifest', './icon.png'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(self.clients.claim());
+});
+
+// Network first (updates arrive), cache when offline.
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  e.respondWith(
+    fetch(req)
+      .then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copy));
+        return res;
+      })
+      .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+  );
+});
+
+<<<<END FILE>>>>
+
+<<<<FILE: runner/manifest.webmanifest>>>>
+ENCODING: text
+BYTES: 290
+SHA-256: d49253f80fb6ab95e385758eb99a954e1c0e7f48bf86636e202c838877081c02
+<<<<CONTENT>>>>
+{
+  "name": "App Runner",
+  "short_name": "Runner",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0025b8",
+  "theme_color": "#0025b8",
+  "icons": [
+    { "src": "icon.png", "sizes": "192x192 512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
+
+<<<<END FILE>>>>
+
+<<<<FILE: runner/icon.png>>>>
+ENCODING: base64
+BYTES: 2235
+SHA-256: 9a9e0324b4eec5556ad0a3e749799ee62d0f1fd101d527efe534426950d664f6
+<<<<CONTENT>>>>
+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
+<<<<END FILE>>>>
+
+<<<<FILE: .github/copilot-instructions.md>>>>
+ENCODING: text
+BYTES: 5230
+SHA-256: 377deac89ee69519f600736b954376cc4374dff90bd662a0aa91a164a2e9da3a
+<<<<CONTENT>>>>
+# Tiny Apps repo: instructions for Copilot
+
+This repo is a hub plus a collection of tiny offline web apps (PWAs), hosted on GitHub Pages.
+No build step, no frameworks, no npm. Plain HTML, CSS and JavaScript only.
+
+## Layout
+
+```
+index.html              HUB. The landing page, and itself an installable PWA.
+sw.js                   Hub service worker.
+manifest.webmanifest    Hub manifest ("Tiny Apps").
+icon.png                Hub icon.
+.github/copilot-instructions.md   This file.
+<app>/                  One folder per tiny app (example: loan/)
+  index.html            The whole app in ONE file (HTML + CSS + JS inline).
+  sw.js                 This app's own service worker.
+  manifest.webmanifest  Name, colors and icon, so it can also be installed on its own.
+  icon.png              App icon.
+```
+
+## How the hub works
+
+- The hub lists every app from the `APPS` array at the top of the script in the root `index.html`.
+- The hub can be added to the home screen. Its scope is the whole site, so tapping an app opens it inside the hub.
+- Every app can also be installed on its own from its own folder.
+- Stay up to date: on load (and with the "Check for updates" button) the hub re-downloads
+  its own files and every app's `files` list (bypassing the HTTP cache) into the shared cache,
+  so all apps work offline and stay current without opening each one.
+- Every service worker in this repo uses the SAME cache name: `tiny-apps`. Do not change it,
+  and do not create per-app cache names. Workers are network first, falling back to the cache offline.
+
+## The runner (`runner/`)
+
+A template app. The first launch asks the user to paste HTML or choose an HTML/text file; after that
+this copy loads that app every time with no prompt, so it simply becomes that app.
+- The pasted code is stored in localStorage under `runner:<folder name>:code`, and the app's own data
+  under `runner:<folder name>:state`. The folder name is the slot, so every copy needs its own folder.
+- The app runs in a sandboxed iframe (`srcdoc`). The runner injects a small shim (`shim()`) that gives
+  the app a `localStorage` that is saved by the runner (a hidden scratch pad), and sends link clicks to the runner.
+  Pasted apps need no code changes, as long as they use localStorage (not IndexedDB or their own service worker).
+- A small ⋯ button (bottom left) opens Save backup / Restore backup / Back to Tiny Apps.
+- To make another app: copy the whole `runner/` folder to a new folder name (for example `budget/`), then add
+  a hub entry for it in the root `index.html` `APPS` list. Do not edit the runner code per copy.
+- Do not add "reset" or "replace app" features unless asked.
+
+## Rules
+
+- Every app lives in its own folder. Never mix one app's files into another's folder or the root.
+- Each app is self-contained: one `index.html` with inline CSS and JS. Use relative paths only.
+- Each app registers its own `sw.js` with `scope: './'` from its own folder.
+- Data is stored on the device (localStorage or IndexedDB). No servers, no accounts, no tracking.
+- Use a unique storage key per app (example: `loanTracker.v1`) because all apps share one origin.
+- Every app has a "← Back to Tiny Apps" button at the very bottom (a link to `../`) that asks the user
+  to confirm with a pop-up (`confirm()`) before leaving, and warns if there is unsaved input. Copy it from `loan/index.html` (`#homeLink`).
+- Mobile first. Simple, readable, light and dark mode. Keep files small.
+- Icons: PNG, 512x512, no more than three colors (brand blue `#0025b8`, green `#098a11`, white), as small as possible.
+
+## Adding a new app
+
+1. Create `<app>/` with `index.html`, `sw.js`, `manifest.webmanifest` and `icon.png`.
+   Copy `loan/sw.js` and `loan/manifest.webmanifest` and change the name, `start_url` stays `./`.
+2. Add one entry to `APPS` in the root `index.html`:
+   `{ name: 'Name', file: '<app>/', desc: 'One line', files: ['<app>/', '<app>/index.html', '<app>/manifest.webmanifest', '<app>/icon.png'] }`
+   The `files` list must name every file the app needs offline. The hub tile always shows that app folder's own `icon.png`, so there is no icon setting.
+3. Do not edit other apps while adding a new one.
+
+## Current apps
+
+- `loan/` Loan Tracker. Paste loan account text. It saves snapshots, shows what changed, keeps a
+  de-duplicated payment log (the same date, account and amount is never logged twice), and has a
+  link to the lender site. It understands four pasted screens: the main account page (with Upcoming and
+  Recent payments), Additional Payment Details, Recurring Autopay Scheduled, and All Payments. The parser
+  is the `parseText` function between the `/*PARSER*/` markers. A "View all payments" button shows the
+  full log grouped by month.
+  Each paste is saved as a timestamped snapshot, and the current status is all snapshots layered
+  oldest to newest (`mergedState`): newer values win on conflicts, and anything a newer paste leaves
+  out (or shows as `-`) is kept from earlier pastes. Never let a partial paste erase data.
+  The "days until/past due" count is calculated live (`daysNow`) from the most recently pasted of
+  Days Past Due (moved forward by the days since that paste) or Current Due Date, so it changes daily.
+
+<<<<END FILE>>>>
+
+OPTIONAL PYTHON EXTRACTOR (save as extract.py, run: python extract.py this-file.txt)
+import re, sys, base64, hashlib, os
+t = open(sys.argv[1], encoding="utf-8").read()
+for m in re.finditer(r"<<<<FILE: ([^\n]+?)>>>>\nENCODING: (\w+)\nBYTES: (\d+)\nSHA-256: (\w+)\n<<<<CONTENT>>>>\n(.*?)\n<<<<END FILE>>>>", t, re.S):
+    path, enc, size, sha, body = m.groups()
+    data = base64.b64decode(body) if enc == "base64" else body.encode("utf-8")
+    ok = hashlib.sha256(data).hexdigest() == sha
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    open(path, "wb").write(data)
+    print("OK  " if ok else "BAD ", path)
